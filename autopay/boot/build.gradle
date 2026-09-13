@@ -1,0 +1,19 @@
+// boot - 실행 가능한 Spring Boot 애플리케이션 (조립 + 설정)
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation project(':contract')
+    implementation project(':app')
+    implementation project(':client-rest')
+    implementation project(':client-message')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // MyBatis-Plus (@MapperScan, 설정 클래스에서 사용)
+    implementation "com.baomidou:mybatis-plus-spring-boot3-starter:${mybatisPlusVersion}"
+
+    // 개발 편의: 코드 변경 시 자동 재시작, 정적 리소스 즉시 반영
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
+}

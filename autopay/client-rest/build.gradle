@@ -1,0 +1,7 @@
+// client-rest - 외부 시스템 REST 연동 어댑터 (향후 확장)
+dependencies {
+    implementation project(':contract')
+    implementation project(':app')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}

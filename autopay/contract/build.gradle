@@ -1,0 +1,4 @@
+// contract - 모듈 간 공개 계약 (DTO, Contract API 인터페이스)
+dependencies {
+    implementation 'org.springframework:spring-context'
+}

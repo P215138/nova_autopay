@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>청구계정 등록</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff; border-radius: 10px; padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px;
+        }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input, select {
+            width: 100%; padding: 10px; border: 1px solid #d0d3d8;
+            border-radius: 6px; font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        button {
+            padding: 10px 14px; color: #fff; border: none; border-radius: 6px;
+            font-size: 14px; cursor: pointer;
+        }
+        button.lookup { width: 100%; background: #64748b; }
+        button.lookup:hover { background: #475569; }
+        button.submit { width: 100%; margin-top: 22px; background: #2563eb; padding: 12px; font-size: 15px; }
+        button.submit:hover { background: #1d4ed8; }
+        button.secondary { background: #64748b; }
+        .info { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #f1f5f9; font-size: 13px; color: #445; }
+        .info.ok { background: #e7f6ec; color: #16794c; }
+        .info.err { background: #fdecec; color: #b42318; }
+        .result { margin-top: 18px; padding: 14px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; display: none; }
+        .result.ok { background: #e7f6ec; color: #16794c; display: block; }
+        .result.err { background: #fdecec; color: #b42318; display: block; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #eee; padding: 8px 6px; text-align: left; }
+        th { background: #f8fafc; color: #445; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; }
+        .muted { color: #889; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>청구계정 등록</h1>
+    <p class="desc">고객을 조회해 청구계정을 생성합니다. (청구계정번호는 2로 시작하는 10자리 자동 채번)</p>
+
+    <div class="card">
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+
+        <label>고객 주민번호</label>
+        <div class="row">
+            <div style="flex:2;"><input id="ownerRrn" placeholder="예: 6808231247113"></div>
+            <div style="flex:1;"><button class="lookup" onclick="lookupOwner()">고객 조회</button></div>
+        </div>
+        <input type="hidden" id="customerNo">
+        <div id="ownerInfo" class="info">조회된 고객 정보가 여기에 표시됩니다.</div>
+
+        <label>납부구분코드</label>
+        <select id="payClCode">
+            <option value="01">후불</option>
+            <option value="02">선불</option>
+        </select>
+
+        <label>청구주기코드</label>
+        <select id="billingCycleCode">
+            <option value="M">월</option>
+            <option value="Q">분기</option>
+            <option value="Y">년</option>
+        </select>
+
+        <button class="submit" onclick="submitForm()">청구계정 등록</button>
+        <div id="result" class="result"></div>
+    </div>
+
+    <div class="card">
+        <div class="toolbar">
+            <h1 style="font-size:16px;">청구계정 목록</h1>
+            <button class="secondary" onclick="loadList()">새로고침</button>
+        </div>
+        <table>
+            <thead>
+                <tr><th>청구계정번호</th><th>고객번호</th><th>납부구분</th><th>청구주기</th><th>사용</th></tr>
+            </thead>
+            <tbody id="listBody">
+                <tr><td colspan="5" class="muted">목록을 불러오려면 새로고침을 누르세요.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function val(id) { return document.getElementById(id).value; }
+    function setInfo(cls, text) {
+        const el = document.getElementById('ownerInfo');
+        el.className = 'info ' + cls; el.textContent = text;
+    }
+    function showResult(ok, text) {
+        const el = document.getElementById('result');
+        el.className = 'result ' + (ok ? 'ok' : 'err'); el.textContent = text;
+    }
+
+    async function lookupOwner() {
+        const rrn = val('ownerRrn').trim();
+        document.getElementById('customerNo').value = '';
+        if (!rrn) { setInfo('err', '주민번호를 입력하세요.'); return; }
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (res.ok) {
+                const c = await res.json();
+                document.getElementById('customerNo').value = c.customerNo;
+                setInfo('ok', '고객번호: ' + c.customerNo + ' / 이름: ' + (c.customerNm || '-') +
+                    ' / 이동전화: ' + (c.mobilePhno || '-'));
+            } else {
+                setInfo('err', '해당 주민번호의 고객이 없습니다.');
+            }
+        } catch (e) { setInfo('err', '요청 오류: ' + e.message); }
+    }
+
+    async function submitForm() {
+        const customerNo = val('customerNo');
+        if (!customerNo) {
+            alert('먼저 주민번호로 [고객 조회]를 눌러 고객을 확인하세요.');
+            return;
+        }
+        const body = {
+            tenantId: val('tenantId'),
+            customerNo: customerNo,
+            payClCode: val('payClCode'),
+            billingCycleCode: val('billingCycleCode')
+        };
+        try {
+            const res = await fetch('/api/autopay/billing-accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showResult(true, '등록 성공\n청구계정번호: ' + data.billingAccountNo +
+                    '\n고객번호: ' + data.customerNo);
+                loadList();
+            } else {
+                const msg = (data && data.message) ? data.message : ('등록 실패 (' + res.status + ')');
+                alert(msg); showResult(false, msg);
+            }
+        } catch (e) { alert('요청 오류: ' + e.message); }
+    }
+
+    async function loadList() {
+        try {
+            const res = await fetch('/api/autopay/billing-accounts');
+            const list = await res.json();
+            const tbody = document.getElementById('listBody');
+            if (!Array.isArray(list) || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="muted">등록된 청구계정이 없습니다.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map(b =>
+                '<tr><td>' + b.billingAccountNo + '</td><td>' + (b.customerNo || '') +
+                '</td><td>' + payClLabel(b.payClCode) + '</td><td>' + (b.billingCycleCode || '') +
+                '</td><td>' + (b.useYn || '') + '</td></tr>'
+            ).join('');
+        } catch (e) {
+            document.getElementById('listBody').innerHTML =
+                '<tr><td colspan="5" style="color:#b42318;">조회 오류: ' + e.message + '</td></tr>';
+        }
+    }
+
+    function payClLabel(cd) {
+        if (cd === '01') return '후불';
+        if (cd === '02') return '선불';
+        return cd || '-';
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>납부계정 등록</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: "맑은 고딕", "Malgun Gothic", sans-serif; background: #f4f5f7; margin: 0; padding: 24px; color: #222; }
+        .container { max-width: 820px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #d0d3d8; border-radius: 6px; font-size: 14px; }
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+        button { padding: 10px 14px; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+        button.lookup { width: 100%; background: #64748b; }
+        button.lookup:hover { background: #475569; }
+        button.submit { width: 100%; margin-top: 22px; background: #2563eb; padding: 12px; font-size: 15px; }
+        button.submit:hover { background: #1d4ed8; }
+        button.mini { background: #16a34a; padding: 6px 10px; font-size: 13px; }
+        button.mini:hover { background: #15803d; }
+        button.secondary { background: #64748b; }
+        .info { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #f1f5f9; font-size: 13px; color: #445; }
+        .info.ok { background: #e7f6ec; color: #16794c; }
+        .info.err { background: #fdecec; color: #b42318; }
+        .result { margin-top: 18px; padding: 14px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; display: none; }
+        .result.ok { background: #e7f6ec; color: #16794c; display: block; }
+        .result.err { background: #fdecec; color: #b42318; display: block; }
+        .hint { color: #889; font-size: 12px; margin-top: 4px; }
+        .section-title { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #d0d3d8; font-size: 13px; font-weight: 700; color: #2563eb; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #eee; padding: 8px 6px; text-align: left; }
+        th { background: #f8fafc; color: #445; }
+        .muted { color: #889; }
+        .newbox { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-top: 10px; background: #fafbfc; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>납부계정 등록</h1>
+    <p class="desc">주민번호로 고객을 조회한 뒤, 등록된 납부수단을 선택하거나 새로 등록하여 납부계정을 생성합니다.</p>
+
+    <div class="card">
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+
+        <!-- 1. 고객 조회 -->
+        <label>고객 주민번호</label>
+        <div class="row">
+            <div style="flex:2;"><input id="ownerRrn" placeholder="예: 6808231247113"></div>
+            <div style="flex:1;"><button class="lookup" onclick="lookupOwner()">고객 조회</button></div>
+        </div>
+        <input type="hidden" id="customerNo">
+        <div id="ownerInfo" class="info">조회된 고객 정보가 여기에 표시됩니다.</div>
+
+        <!-- 조회 후 노출되는 영역 -->
+        <div id="afterLookup" class="hidden">
+            <!-- 2. 청구계정 선택 -->
+            <label>청구계정</label>
+            <select id="invoiceAcctNo"><option value="">-- 청구계정 조회 필요 --</option></select>
+            <div class="hint">해당 고객의 청구계정 목록입니다. 없으면 청구계정 등록 화면에서 먼저 만드세요.</div>
+
+            <!-- 3. 납부수단 선택 -->
+            <div class="section-title">납부수단 선택</div>
+            <label>메인 납부수단</label>
+            <select id="payMeansNo"><option value="">-- 납부수단 없음 --</option></select>
+
+            <label>예비 납부수단 (선택)</label>
+            <select id="reservePayMeansNo"><option value="">없음</option></select>
+
+            <div id="noMeansBox" class="hidden">
+                <div class="info err">등록된 납부수단이 없습니다. 아래에서 새로 등록하세요.</div>
+            </div>
+            <button class="mini" type="button" onclick="toggleNewMeans()" style="margin-top:10px;">+ 납부수단 신규 등록</button>
+
+            <!-- 3-1. 납부수단 신규 등록 (인라인) -->
+            <div id="newMeansBox" class="newbox hidden">
+                <div class="section-title" style="margin-top:0;border:none;padding-top:0;">납부수단 신규 등록</div>
+                <div class="row">
+                    <div>
+                        <label>유형</label>
+                        <select id="nmType" onchange="fillFinc()">
+                            <option value="01">은행</option>
+                            <option value="02">카드</option>
+                            <option value="05">간편결제</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label id="nmFincLabel">은행</label>
+                        <select id="nmFinc"></select>
+                    </div>
+                </div>
+                <label>별칭</label>
+                <input id="nmNm" placeholder="예: 급여통장">
+                <label id="nmAcctLabel">계좌번호</label>
+                <input id="nmAcctNo" placeholder="계좌 또는 카드번호">
+                <div id="nmCardWrap" class="hidden">
+                    <label>카드 유효기간 (YYMM)</label>
+                    <input id="nmCardValid" placeholder="예: 2812">
+                </div>
+                <button class="mini" type="button" onclick="createMeans()" style="margin-top:12px;">납부수단 등록</button>
+                <div id="nmResult" class="info hidden"></div>
+            </div>
+
+            <!-- 4. 납부계정 정보 -->
+            <div class="section-title">납부계정 정보</div>
+            <div class="row">
+                <div>
+                    <label>납부구분</label>
+                    <select id="payCatgCd">
+                        <option value="01">후불</option>
+                        <option value="02">선불</option>
+                    </select>
+                </div>
+                <div>
+                    <label>납부방법</label>
+                    <select id="payMthdCd">
+                        <option value="01">은행</option>
+                        <option value="02">카드</option>
+                        <option value="05">간편결제</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label>납부주기</label>
+                    <select id="payCycleCd">
+                        <option value="M">월</option>
+                        <option value="Q">분기</option>
+                        <option value="Y">년</option>
+                    </select>
+                </div>
+                <div>
+                    <label>납부주기일</label>
+                    <select id="payCycleDayCd">
+                        <option value="15">15일</option>
+                        <option value="21">21일</option>
+                        <option value="23">23일</option>
+                        <option value="25">25일</option>
+                        <option value="99">말일</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="submit" onclick="submitForm()">납부계정 등록</button>
+            <div id="result" class="result"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h1 style="font-size:16px;">납부계정 목록</h1>
+            <button class="secondary" onclick="loadList()">새로고침</button>
+        </div>
+        <table>
+            <thead>
+                <tr><th>납부계정번호</th><th>청구계정번호</th><th>납부방법</th><th>주기</th><th>메인수단</th><th>예비수단</th><th>상태</th></tr>
+            </thead>
+            <tbody id="listBody"><tr><td colspan="7" class="muted">새로고침을 누르세요.</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // 금융기관 코드
+    const BANK_CODES = [
+        {code:'004',name:'국민은행'},{code:'088',name:'신한은행'},{code:'081',name:'하나은행'},
+        {code:'020',name:'우리은행'},{code:'011',name:'농협은행'},{code:'090',name:'카카오뱅크'},{code:'092',name:'토스뱅크'}
+    ];
+    const CARD_CODES = [
+        {code:'01',name:'KB국민카드'},{code:'02',name:'신한카드'},{code:'03',name:'삼성카드'},{code:'04',name:'현대카드'},{code:'05',name:'롯데카드'}
+    ];
+    const SIMPLE_PAY_CODES = [{code:'KP',name:'카카오페이'},{code:'NP',name:'네이버페이'},{code:'TP',name:'토스페이'}];
+
+    function val(id){ return document.getElementById(id).value; }
+    function show(id){ document.getElementById(id).classList.remove('hidden'); }
+    function hide(id){ document.getElementById(id).classList.add('hidden'); }
+    function setInfo(id, cls, text){ const el=document.getElementById(id); el.className='info '+cls; el.textContent=text; }
+    function showResult(ok, text){ const el=document.getElementById('result'); el.className='result '+(ok?'ok':'err'); el.textContent=text; }
+
+    // 1) 고객 조회 → 청구계정/납부수단 로드
+    async function lookupOwner() {
+        const rrn = val('ownerRrn').trim();
+        document.getElementById('customerNo').value = '';
+        hide('afterLookup');
+        if (!rrn) { setInfo('ownerInfo','err','주민번호를 입력하세요.'); return; }
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (!res.ok) { setInfo('ownerInfo','err','해당 주민번호의 고객이 없습니다.'); return; }
+            const c = await res.json();
+            document.getElementById('customerNo').value = c.customerNo;
+            setInfo('ownerInfo','ok','고객번호: ' + c.customerNo + ' / 이름: ' + (c.customerNm||'-') + ' / 이동전화: ' + (c.mobilePhno||'-'));
+            show('afterLookup');
+            await loadInvoiceAccts(c.customerNo);
+            await loadMeans(c.customerNo);
+        } catch(e){ setInfo('ownerInfo','err','요청 오류: '+e.message); }
+    }
+
+    // 2) 청구계정 목록
+    async function loadInvoiceAccts(customerNo) {
+        const sel = document.getElementById('invoiceAcctNo');
+        sel.innerHTML = '';
+        try {
+            const res = await fetch('/api/autopay/billing-accounts?tenantId=' + encodeURIComponent(val('tenantId')) + '&customerNo=' + encodeURIComponent(customerNo));
+            const list = await res.json();
+            if (!Array.isArray(list) || list.length === 0) {
+                sel.innerHTML = '<option value="">청구계정 없음 (먼저 등록 필요)</option>';
+                return;
+            }
+            sel.innerHTML = list.map(b => '<option value="' + b.billingAccountNo + '">' + b.billingAccountNo + ' (' + payClLabel(b.payClCode) + ')</option>').join('');
+        } catch(e){ sel.innerHTML = '<option value="">조회 오류</option>'; }
+    }
+
+    // 3) 납부수단 목록
+    async function loadMeans(customerNo) {
+        const main = document.getElementById('payMeansNo');
+        const rsv = document.getElementById('reservePayMeansNo');
+        try {
+            const res = await fetch('/api/autopay/pay-means?tenantId=' + encodeURIComponent(val('tenantId')) + '&customerNo=' + encodeURIComponent(customerNo));
+            const list = await res.json();
+            if (!Array.isArray(list) || list.length === 0) {
+                main.innerHTML = '<option value="">-- 납부수단 없음 --</option>';
+                rsv.innerHTML = '<option value="">없음</option>';
+                show('noMeansBox');
+                return;
+            }
+            hide('noMeansBox');
+            const opts = list.map(m => {
+                const acctNm = m.payMeansNm || '(계좌명없음)';
+                const finc = fincName(m.payMeansTypeCd, m.fincInstCd);
+                const holder = m.holderNm || '(예금주없음)';
+                const acctNo = m.bankacctCardAltrnateId != null ? m.bankacctCardAltrnateId : '-';
+                const label = acctNm + ' / ' + finc + ' / ' + holder + ' / ' + acctNo;
+                return '<option value="' + m.payMeansNo + '">' + label + '</option>';
+            }).join('');
+            main.innerHTML = opts;
+            rsv.innerHTML = '<option value="">없음</option>' + opts;
+        } catch(e) {
+            main.innerHTML = '<option value="">조회 오류</option>';
+        }
+    }
+
+    // 납부수단 신규 등록 토글/입력
+    function toggleNewMeans(){ document.getElementById('newMeansBox').classList.toggle('hidden'); fillFinc(); }
+    function fillFinc(){
+        const t = val('nmType');
+        let list, label;
+        if (t==='02'){ list=CARD_CODES; label='카드사'; } else if (t==='05'){ list=SIMPLE_PAY_CODES; label='간편결제사'; } else { list=BANK_CODES; label='은행'; }
+        document.getElementById('nmFincLabel').textContent = label;
+        document.getElementById('nmFinc').innerHTML = list.map(i => '<option value="' + i.code + '">' + i.name + ' (' + i.code + ')</option>').join('');
+        const isCard = (t==='02');
+        document.getElementById('nmCardWrap').classList.toggle('hidden', !isCard);
+        document.getElementById('nmAcctLabel').textContent = isCard ? '카드번호' : '계좌번호';
+    }
+
+    async function createMeans() {
+        const customerNo = val('customerNo');
+        if (!customerNo) { alert('먼저 고객을 조회하세요.'); return; }
+        const body = {
+            tenantId: val('tenantId'), customerNo: customerNo,
+            payMeansTypeCd: val('nmType'), payMeansNm: val('nmNm'),
+            fincInstCd: val('nmFinc'), accountOrCardNo: val('nmAcctNo'),
+            holderNm: '', cardValidYymm: val('nmCardValid')
+        };
+        try {
+            const res = await fetch('/api/autopay/pay-means', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            const box = document.getElementById('nmResult');
+            if (res.ok) {
+                box.className='info ok'; box.classList.remove('hidden');
+                box.textContent = '납부수단 등록 성공 (번호: ' + data.payMeansNo + '). 목록을 갱신합니다.';
+                await loadMeans(customerNo);
+                document.getElementById('payMeansNo').value = data.payMeansNo; // 방금 등록한 것 선택
+                hide('newMeansBox');
+            } else {
+                const msg = (data && data.message) ? data.message : '등록 실패';
+                box.className='info err'; box.classList.remove('hidden'); box.textContent = msg;
+                alert(msg);
+            }
+        } catch(e){ alert('요청 오류: '+e.message); }
+    }
+
+    // 4) 납부계정 등록
+    async function submitForm() {
+        const invoiceAcctNo = val('invoiceAcctNo');
+        const payMeansNo = val('payMeansNo');
+        if (!invoiceAcctNo) { alert('청구계정을 선택하세요. (없으면 청구계정 등록 필요)'); return; }
+        if (!payMeansNo) { alert('메인 납부수단을 선택하세요. (없으면 신규 등록)'); return; }
+        const body = {
+            tenantId: val('tenantId'),
+            invoiceAcctNo: Number(invoiceAcctNo),
+            payCatgCd: val('payCatgCd'),
+            payMthdCd: val('payMthdCd'),
+            payCycleCd: val('payCycleCd'),
+            payCycleDayCd: val('payCycleDayCd'),
+            payMeansNo: Number(payMeansNo),
+            reservePayMeansNo: val('reservePayMeansNo') ? Number(val('reservePayMeansNo')) : null
+        };
+        try {
+            const res = await fetch('/api/autopay/payment-accounts', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showResult(true, '등록 성공\n납부계정번호: ' + data.payAcctNo + '\n청구계정번호: ' + data.invoiceAcctNo + '\n메인수단: ' + data.payMeansNo + (data.reservePayMeansNo ? '\n예비수단: ' + data.reservePayMeansNo : ''));
+                loadList();
+            } else {
+                const msg = (data && data.message) ? data.message : ('등록 실패 (' + res.status + ')');
+                alert(msg); showResult(false, msg);
+            }
+        } catch(e){ alert('요청 오류: '+e.message); }
+    }
+
+    async function loadList() {
+        try {
+            const res = await fetch('/api/autopay/payment-accounts');
+            const list = await res.json();
+            const tbody = document.getElementById('listBody');
+            if (!Array.isArray(list) || list.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="muted">등록된 납부계정이 없습니다.</td></tr>'; return; }
+            tbody.innerHTML = list.map(p =>
+                '<tr><td>' + p.payAcctNo + '</td><td>' + (p.invoiceAcctNo||'') + '</td><td>' + payMthdLabel(p.payMthdCd) +
+                '</td><td>' + (p.payCycleCd||'') + '/' + (p.payCycleDayCd||'') + '</td><td>' + (p.payMeansNo||'') +
+                '</td><td>' + (p.reservePayMeansNo||'') + '</td><td>' + (p.payAcctStatCd||'') + '</td></tr>'
+            ).join('');
+        } catch(e){ document.getElementById('listBody').innerHTML = '<tr><td colspan="7" style="color:#b42318;">조회 오류: '+e.message+'</td></tr>'; }
+    }
+
+    function payMthdLabel(cd){ return cd==='01'?'은행':cd==='02'?'카드':cd==='05'?'간편결제':(cd||'-'); }
+    function payClLabel(cd){ return cd==='01'?'후불':cd==='02'?'선불':(cd||'-'); }
+
+    // 납부수단 유형+기관코드 → 기관명 (예: 01/088 → 신한은행)
+    function fincName(typeCd, fincCd) {
+        let list;
+        if (typeCd === '02') list = CARD_CODES;
+        else if (typeCd === '05') list = SIMPLE_PAY_CODES;
+        else list = BANK_CODES;
+        const found = list.find(i => i.code === fincCd);
+        return found ? found.name : (fincCd || '-');
+    }
+
+    // 초기 금융기관 목록
+    window.addEventListener('DOMContentLoaded', fillFinc);
+</script>
+</body>
+</html>

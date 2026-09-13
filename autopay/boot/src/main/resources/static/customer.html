@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고객 등록</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .hint { color: #889; font-size: 12px; margin-top: 4px; }
+        button {
+            padding: 12px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        button:hover { background: #1d4ed8; }
+        button.submit { width: 100%; margin-top: 22px; }
+        button.secondary { background: #64748b; }
+        button.secondary:hover { background: #475569; }
+        .result {
+            margin-top: 18px;
+            padding: 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .result.ok { background: #e7f6ec; color: #16794c; display: block; }
+        .result.err { background: #fdecec; color: #b42318; display: block; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #eee; padding: 8px 6px; text-align: left; }
+        th { background: #f8fafc; color: #445; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>고객 등록</h1>
+    <p class="desc">고객 정보를 등록하고 목록을 조회합니다.</p>
+
+    <div class="card">
+        <label>고객번호</label>
+        <input id="customerNo" placeholder="비워두면 자동 생성">
+        <div class="hint">직접 입력하거나, 비워두면 서버에서 자동 채번합니다.</div>
+
+        <label>이름</label>
+        <input id="customerNm" placeholder="예: 홍길동">
+
+        <label>주민번호</label>
+        <input id="rrn" placeholder="예: 900101-1234567">
+        <div class="hint">성별은 주민번호 뒷자리로 자동 판별됩니다.</div>
+
+        <label>이동전화번호</label>
+        <input id="mobilePhno" placeholder="예: 01012345678">
+
+        <button class="submit" onclick="submitForm()">고객 등록</button>
+        <div id="result" class="result"></div>
+    </div>
+
+    <div class="card">
+        <div class="toolbar">
+            <h1 style="font-size:16px;">고객 목록</h1>
+            <button class="secondary" onclick="loadList()">새로고침</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>고객번호</th><th>이름</th><th>주민번호</th><th>성별</th><th>이동전화</th>
+                </tr>
+            </thead>
+            <tbody id="listBody">
+                <tr><td colspan="5" style="color:#889;">목록을 불러오려면 새로고침을 누르세요.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function val(id) { return document.getElementById(id).value; }
+
+    function showResult(ok, text) {
+        const el = document.getElementById('result');
+        el.className = 'result ' + (ok ? 'ok' : 'err');
+        el.textContent = text;
+    }
+
+    async function submitForm() {
+        const body = {
+            customerNo: val('customerNo'),
+            customerNm: val('customerNm'),
+            rrn: val('rrn'),
+            genderCd: '',
+            mobilePhno: val('mobilePhno')
+        };
+        try {
+            const res = await fetch('/api/autopay/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showResult(true,
+                    '등록 성공\n고객번호: ' + data.customerNo +
+                    '\n이름: ' + data.customerNm +
+                    '\n성별: ' + (data.genderCd || '-'));
+                loadList();
+            } else {
+                const msg = (data && data.message) ? data.message : ('등록 실패 (' + res.status + ')');
+                alert(msg);
+                showResult(false, msg);
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+            showResult(false, '요청 오류: ' + e.message);
+        }
+    }
+
+    async function loadList() {
+        try {
+            const res = await fetch('/api/autopay/customers');
+            const list = await res.json();
+            const tbody = document.getElementById('listBody');
+            if (!Array.isArray(list) || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="color:#889;">등록된 고객이 없습니다.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map(c =>
+                '<tr><td>' + c.customerNo + '</td><td>' + (c.customerNm || '') +
+                '</td><td>' + (c.rrn || '') + '</td><td>' + genderLabel(c.genderCd) +
+                '</td><td>' + (c.mobilePhno || '') + '</td></tr>'
+            ).join('');
+        } catch (e) {
+            document.getElementById('listBody').innerHTML =
+                '<tr><td colspan="5" style="color:#b42318;">조회 오류: ' + e.message + '</td></tr>';
+        }
+    }
+
+    function genderLabel(g) {
+        if (g === 'M') return '남';
+        if (g === 'F') return '여';
+        return '-';
+    }
+</script>
+</body>
+</html>

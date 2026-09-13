@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>autopay 관리</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            display: flex;
+            height: 100vh;
+            color: #222;
+        }
+        /* 사이드 메뉴 */
+        .sidebar {
+            width: 240px;
+            background: #1f2937;
+            color: #e5e7eb;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .brand {
+            padding: 20px 20px 16px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            border-bottom: 1px solid #374151;
+        }
+        .brand small { display: block; font-size: 12px; font-weight: 400; color: #9ca3af; margin-top: 4px; }
+        .menu { list-style: none; margin: 0; padding: 12px 0; flex: 1; }
+        .menu li { }
+        .menu a {
+            display: block;
+            padding: 12px 20px;
+            color: #d1d5db;
+            text-decoration: none;
+            font-size: 14px;
+            border-left: 3px solid transparent;
+            cursor: pointer;
+        }
+        .menu a:hover { background: #374151; color: #fff; }
+        .menu a.active {
+            background: #111827;
+            color: #fff;
+            border-left-color: #3b82f6;
+            font-weight: 600;
+        }
+        .menu .group-title {
+            padding: 12px 20px 6px;
+            font-size: 11px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .footer { padding: 14px 20px; font-size: 11px; color: #6b7280; border-top: 1px solid #374151; }
+        /* 콘텐츠 */
+        .content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .topbar {
+            height: 48px;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 14px;
+            color: #374151;
+            font-weight: 600;
+        }
+        iframe {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: #f4f5f7;
+        }
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="brand">
+            autopay
+            <small>납부수단관리</small>
+        </div>
+        <ul class="menu">
+            <li class="group-title">기준정보</li>
+            <li><a data-page="customer.html" data-title="고객 등록">고객 등록</a></li>
+            <li><a data-page="billing-account.html" data-title="청구계정 등록">청구계정 등록</a></li>
+            <li class="group-title">납부수단</li>
+            <li><a data-page="pay-means-hub.html" data-title="납부수단 관리 (통합)">납부수단 관리 (통합)</a></li>
+            <li><a data-page="pay-means-view.html" data-title="납부수단 조회">납부수단 조회</a></li>
+            <li><a data-page="pay-means.html" data-title="납부수단 등록">납부수단 등록</a></li>
+            <li><a data-page="agent-link.html" data-title="기존 수단 대리납부 연결">기존 수단 대리납부 연결</a></li>
+            <li><a data-page="agent-consent.html" data-title="대리납부 동의">대리납부 동의</a></li>
+            <li class="group-title">납부계정</li>
+            <li><a data-page="payment-account.html" data-title="납부계정 등록">납부계정 등록</a></li>
+        </ul>
+        <div class="footer">SKT NOVA · autopay</div>
+    </nav>
+
+    <div class="content">
+        <div class="topbar" id="topTitle">고객 등록</div>
+        <iframe id="frame" src="customer.html" title="content"></iframe>
+    </div>
+
+    <script>
+        const links = document.querySelectorAll('.menu a');
+        const frame = document.getElementById('frame');
+        const topTitle = document.getElementById('topTitle');
+
+        function activate(link) {
+            links.forEach(a => a.classList.remove('active'));
+            link.classList.add('active');
+            frame.src = link.dataset.page;
+            topTitle.textContent = link.dataset.title;
+        }
+
+        links.forEach(link => {
+            link.addEventListener('click', () => activate(link));
+        });
+
+        // 첫 메뉴 활성화
+        if (links.length > 0) {
+            links[0].classList.add('active');
+        }
+    </script>
+</body>
+</html>

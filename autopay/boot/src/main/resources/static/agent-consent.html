@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대리납부 동의(승인/거절)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        button {
+            padding: 10px 14px;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button.lookup { width: 100%; background: #2563eb; }
+        button.lookup:hover { background: #1d4ed8; }
+        button.approve { background: #16a34a; }
+        button.approve:hover { background: #15803d; }
+        button.reject { background: #dc2626; }
+        button.reject:hover { background: #b91c1c; }
+        .info { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #f1f5f9; font-size: 13px; color: #445; }
+        .info.ok { background: #e7f6ec; color: #16794c; }
+        .info.err { background: #fdecec; color: #b42318; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+        th, td { border-bottom: 1px solid #eee; padding: 8px 6px; text-align: left; }
+        th { background: #f8fafc; color: #445; }
+        .muted { color: #889; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>대리납부 동의</h1>
+    <p class="desc">소유주(대리납부자)가 본인 주민번호로 승인 대기 건을 조회하고 승인/거절합니다.</p>
+
+    <div class="card">
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+
+        <label>소유주(대리납부자) 주민번호</label>
+        <div class="row">
+            <div style="flex:2;">
+                <input id="ownerRrn" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:1;">
+                <button class="lookup" onclick="loadPending()">승인 대기 조회</button>
+            </div>
+        </div>
+        <input type="hidden" id="ownerCustomerNo">
+        <div id="ownerInfo" class="info">소유주 정보가 여기에 표시됩니다.</div>
+    </div>
+
+    <div class="card">
+        <h1 style="font-size:16px;">승인 대기 목록</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>피대리납부자명</th><th>은행(카드사)</th><th>계좌(카드)번호</th><th>신청일시</th><th>관계</th><th>처리</th>
+                </tr>
+            </thead>
+            <tbody id="listBody">
+                <tr><td colspan="6" class="muted">소유주 주민번호로 [승인 대기 조회]를 누르세요.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // 금융기관/카드사/간편결제 코드 → 이름 (pay-means 코드표 기준)
+    const BANK_NAMES = {
+        '002': '산업은행', '003': '기업은행', '004': '국민은행', '007': '수협은행',
+        '011': '농협은행', '020': '우리은행', '023': 'SC제일은행', '027': '한국씨티은행',
+        '031': '대구은행', '032': '부산은행', '034': '광주은행', '035': '제주은행',
+        '037': '전북은행', '039': '경남은행', '045': '새마을금고', '048': '신협',
+        '071': '우체국', '081': '하나은행', '088': '신한은행', '089': '케이뱅크',
+        '090': '카카오뱅크', '092': '토스뱅크'
+    };
+    const CARD_NAMES = {
+        '01': 'KB국민카드', '02': '신한카드', '03': '삼성카드', '04': '현대카드',
+        '05': '롯데카드', '06': '우리카드', '07': '하나카드', '08': 'BC카드',
+        '09': 'NH농협카드', '10': '씨티카드'
+    };
+    const SIMPLE_PAY_NAMES = { 'KP': '카카오페이', 'NP': '네이버페이', 'TP': '토스페이' };
+
+    function fincName(typeCd, fincInstCd) {
+        if (!fincInstCd) return '-';
+        let nm;
+        if (typeCd === '02') nm = CARD_NAMES[fincInstCd];
+        else if (typeCd === '05') nm = SIMPLE_PAY_NAMES[fincInstCd];
+        else nm = BANK_NAMES[fincInstCd];
+        return nm ? (nm + ' (' + fincInstCd + ')') : fincInstCd;
+    }
+
+    // 캐시
+    const nameCache = {};
+    const meansCache = {};
+
+    // 고객번호 → 이름
+    async function nameOf(customerNo) {
+        if (!customerNo) return '-';
+        if (nameCache[customerNo]) return nameCache[customerNo];
+        try {
+            const res = await fetch('/api/autopay/customers/' + encodeURIComponent(customerNo));
+            if (res.ok) { const c = await res.json(); const nm = c.customerNm || '-'; nameCache[customerNo] = nm; return nm; }
+        } catch (e) { /* 무시 */ }
+        return '-';
+    }
+
+    // 납부수단번호 → 단건(유형/기관/마스킹 계좌번호)
+    async function meansOf(payMeansNo) {
+        if (!payMeansNo) return null;
+        if (meansCache[payMeansNo]) return meansCache[payMeansNo];
+        try {
+            const res = await fetch('/api/autopay/pay-means/' + encodeURIComponent(payMeansNo));
+            if (res.ok) { const m = await res.json(); meansCache[payMeansNo] = m; return m; }
+        } catch (e) { /* 무시 */ }
+        return null;
+    }
+
+    // 신청일시 포맷 (LocalDateTime 문자열 → 날짜+시분)
+    function fmtDate(v) {
+        if (!v) return '-';
+        return String(v).replace('T', ' ').substring(0, 16);
+    }
+
+    function val(id) { return document.getElementById(id).value; }
+
+    function setInfo(id, cls, text) {
+        const el = document.getElementById(id);
+        el.className = 'info ' + cls;
+        el.textContent = text;
+    }
+
+    // 1) 소유주 주민번호로 고객 조회 → 고객번호 확보 → 2) 승인대기 목록 조회
+    async function loadPending() {
+        const tenantId = val('tenantId');
+        const rrn = val('ownerRrn').trim();
+        document.getElementById('ownerCustomerNo').value = '';
+        if (!rrn) {
+            setInfo('ownerInfo', 'err', '주민번호를 입력하세요.');
+            return;
+        }
+        try {
+            const cRes = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (!cRes.ok) {
+                setInfo('ownerInfo', 'err', '해당 주민번호의 고객이 없습니다.');
+                clearList('소유주를 먼저 조회하세요.');
+                return;
+            }
+            const c = await cRes.json();
+            document.getElementById('ownerCustomerNo').value = c.customerNo;
+            setInfo('ownerInfo', 'ok', '고객번호: ' + c.customerNo + ' / 이름: ' + (c.customerNm || '-'));
+
+            const listRes = await fetch('/api/autopay/pay-means/agent-requests/pending?tenantId='
+                + encodeURIComponent(tenantId) + '&customerNo=' + encodeURIComponent(c.customerNo));
+            const list = await listRes.json();
+            renderList(list);
+        } catch (e) {
+            setInfo('ownerInfo', 'err', '요청 오류: ' + e.message);
+        }
+    }
+
+    async function renderList(list) {
+        const tbody = document.getElementById('listBody');
+        if (!Array.isArray(list) || list.length === 0) {
+            clearList('승인 대기 중인 건이 없습니다.');
+            return;
+        }
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">불러오는 중...</td></tr>';
+
+        // 피대리납부자명 + 수단(은행/계좌번호) 병렬 보강
+        const rows = await Promise.all(list.map(async m => {
+            const [bnfcNm, means] = await Promise.all([
+                nameOf(m.bnfcPayerCustomerNo),
+                meansOf(m.payMeansNo)
+            ]);
+            const finc = means ? fincName(means.payMeansTypeCd, means.fincInstCd) : '-';
+            const acct = means ? (means.accountOrCardNoMasked || '-') : '-';
+            return { m, bnfcNm, finc, acct };
+        }));
+
+        tbody.innerHTML = rows.map(({ m, bnfcNm, finc, acct }) =>
+            '<tr>' +
+            '<td>' + bnfcNm + ' (' + (m.bnfcPayerCustomerNo || '-') + ')</td>' +
+            '<td>' + finc + '</td>' +
+            '<td>' + acct + '</td>' +
+            '<td>' + fmtDate(m.validStartDtm) + '</td>' +
+            '<td>' + relLabel(m.relCatgCd) + '</td>' +
+            '<td>' +
+              '<button class="approve" onclick="complete(' + m.agentPayMapSeqno + ', true)">승인</button> ' +
+              '<button class="reject" onclick="complete(' + m.agentPayMapSeqno + ', false)">거절</button>' +
+            '</td></tr>'
+        ).join('');
+    }
+
+    function clearList(msg) {
+        document.getElementById('listBody').innerHTML =
+            '<tr><td colspan="6" class="muted">' + msg + '</td></tr>';
+    }
+
+    function relLabel(cd) {
+        if (cd === '01') return '부모';
+        if (cd === '02') return '배우자';
+        if (cd === '03') return '자녀';
+        if (cd === '09') return '기타';
+        return cd || '-';
+    }
+
+    // 승인/거절 처리
+    async function complete(seqno, approved) {
+        const tenantId = val('tenantId');
+        try {
+            const res = await fetch('/api/autopay/pay-means/agent-requests/' + seqno + '/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenantId: tenantId, approved: approved })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert((approved ? '승인' : '거절') + ' 완료\n납부수단번호: ' + data.payMeansNo +
+                    '\n상태: ' + data.payMeansStatCd + ' (' + data.payMeansStatLabel + ')');
+                loadPending(); // 목록 갱신
+            } else {
+                alert((data && data.message) ? data.message : ('처리 실패 (' + res.status + ')'));
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+        }
+    }
+</script>
+</body>
+</html>

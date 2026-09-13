@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>납부수단 조회</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 860px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            margin-bottom: 18px;
+        }
+        label { display: block; font-size: 13px; margin: 0 0 6px; font-weight: 600; }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        button.lookup {
+            width: 100%;
+            padding: 10px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button.lookup:hover { background: #1d4ed8; }
+        .owner-info {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            font-size: 13px;
+            color: #445;
+        }
+        .owner-info.ok { background: #e7f6ec; color: #16794c; }
+        .owner-info.err { background: #fdecec; color: #b42318; }
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #2563eb;
+            margin: 0 0 12px;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eef0f3; }
+        th { background: #f8fafc; color: #445; font-weight: 600; }
+        .empty { color: #889; font-size: 13px; padding: 10px 0; }
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #eef4ff;
+            color: #2563eb;
+        }
+        .badge.act { background: #e7f6ec; color: #16794c; }
+        .badge.req { background: #fff6e5; color: #a15c00; }
+        .badge.end { background: #f1f2f4; color: #667; }
+        .hidden { display: none; }
+        .act-btn {
+            padding: 4px 10px;
+            font-size: 12px;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            margin-right: 4px;
+        }
+        .act-btn.warn { background: #d97706; }
+        .act-btn.warn:hover { background: #b45309; }
+        .act-btn.ok { background: #16a34a; }
+        .act-btn.ok:hover { background: #15803d; }
+        .act-btn.danger { background: #dc2626; }
+        .act-btn.danger:hover { background: #b91c1c; }
+        .muted { color: #aab; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>납부수단 조회</h1>
+    <p class="desc">주민번호로 고객을 조회해 지갑(납부수단 목록)과 대리납부 관계를 함께 확인합니다.</p>
+
+    <!-- 조회 조건 -->
+    <div class="card">
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+        <label>주민번호</label>
+        <div class="row">
+            <div style="flex:2;">
+                <input id="rrn" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:1;">
+                <button type="button" class="lookup" onclick="search()">조회</button>
+            </div>
+        </div>
+        <div id="custInfo" class="owner-info">조회할 고객의 주민번호를 입력하세요.</div>
+    </div>
+
+    <!-- 지갑(납부수단 목록) -->
+    <div class="card hidden" id="walletCard">
+        <div class="section-title">보유 납부수단 (지갑)</div>
+        <div id="walletBody"></div>
+    </div>
+
+    <!-- 소유주로서: 내 수단을 남이 쓰는 관계 -->
+    <div class="card hidden" id="asOwnerCard">
+        <div class="section-title">대리관계 · 내가 소유주 (내 수단을 사용하는 사람)</div>
+        <div id="asOwnerBody"></div>
+    </div>
+
+    <!-- 사용자로서: 남의 수단을 내가 쓰는 관계 -->
+    <div class="card hidden" id="asUserCard">
+        <div class="section-title">대리관계 · 내가 사용자 (내가 사용하는 남의 수단)</div>
+        <div id="asUserBody"></div>
+    </div>
+</div>
+
+<script>
+    const TYPE_LABEL = { '01': '은행', '02': '신용카드', '05': '간편결제' };
+    const REL_LABEL = { 'SELF': '본인', '01': '부모', '02': '배우자', '03': '자녀', '09': '기타' };
+
+    // 금융기관/카드사/간편결제 코드 → 이름 (pay-means.html 코드표와 동일 기준)
+    const BANK_NAMES = {
+        '002': '산업은행', '003': '기업은행', '004': '국민은행', '007': '수협은행',
+        '011': '농협은행', '020': '우리은행', '023': 'SC제일은행', '027': '한국씨티은행',
+        '031': '대구은행', '032': '부산은행', '034': '광주은행', '035': '제주은행',
+        '037': '전북은행', '039': '경남은행', '045': '새마을금고', '048': '신협',
+        '071': '우체국', '081': '하나은행', '088': '신한은행', '089': '케이뱅크',
+        '090': '카카오뱅크', '092': '토스뱅크'
+    };
+    const CARD_NAMES = {
+        '01': 'KB국민카드', '02': '신한카드', '03': '삼성카드', '04': '현대카드',
+        '05': '롯데카드', '06': '우리카드', '07': '하나카드', '08': 'BC카드',
+        '09': 'NH농협카드', '10': '씨티카드'
+    };
+    const SIMPLE_PAY_NAMES = { 'KP': '카카오페이', 'NP': '네이버페이', 'TP': '토스페이' };
+
+    // 납부수단유형코드 + 기관코드 → "이름 (코드)" 표기. 유형별로 다른 코드표 사용.
+    function fincName(typeCd, fincInstCd) {
+        if (!fincInstCd) return '-';
+        let nm;
+        if (typeCd === '02') nm = CARD_NAMES[fincInstCd];
+        else if (typeCd === '05') nm = SIMPLE_PAY_NAMES[fincInstCd];
+        else nm = BANK_NAMES[fincInstCd];
+        return nm ? (nm + ' (' + fincInstCd + ')') : fincInstCd;
+    }
+
+    // 고객번호 → 이름 캐시 (반복 조회 방지)
+    const nameCache = {};
+
+    function val(id) { return document.getElementById(id).value; }
+    function show(id) { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+    // PayMeans 상태 뱃지 (활성=10, 정지=20, 해지=30, 종료=40)
+    function statusBadge(cd, label) {
+        let cls = 'badge';
+        if (cd === '10') cls += ' act';
+        else if (cd === '20') cls += ' req';           // 정지: 주황
+        else if (cd === '30' || cd === '40') cls += ' end';
+        else if (cd === '01') cls += ' req';           // 등록중
+        return '<span class="' + cls + '">' + (label || cd || '-') + '</span>';
+    }
+
+    // AgentPayMap 상태 뱃지 (요청=10, 활성=20, 거절=30, 중단=40, 종료=50)
+    function agentStatusBadge(cd, label) {
+        let cls = 'badge';
+        if (cd === '20') cls += ' act';                // 활성: 초록
+        else if (cd === '10') cls += ' req';           // 요청: 주황
+        else if (cd === '30' || cd === '40' || cd === '50') cls += ' end';
+        return '<span class="' + cls + '">' + (label || cd || '-') + '</span>';
+    }
+
+    function relLabel(cd) { return REL_LABEL[cd] || cd || '-'; }
+
+    // 수단번호 → 납부수단 단건(마스킹 계좌번호/유형/기관 포함) 캐시
+    const meansCache = {};
+
+    // 납부수단번호로 단건 조회 (캐시). 계좌번호/유형/기관을 함께 활용.
+    async function meansOf(payMeansNo) {
+        if (!payMeansNo) return null;
+        if (meansCache[payMeansNo]) return meansCache[payMeansNo];
+        try {
+            const res = await fetch('/api/autopay/pay-means/' + encodeURIComponent(payMeansNo));
+            if (res.ok) {
+                const m = await res.json();
+                meansCache[payMeansNo] = m;
+                return m;
+            }
+        } catch (e) { /* 무시 */ }
+        return null;
+    }
+
+    // 고객번호로 이름 조회 (캐시)
+    async function nameOf(tenantId, customerNo) {
+        if (!customerNo) return '-';
+        if (nameCache[customerNo]) return nameCache[customerNo];
+        try {
+            const res = await fetch('/api/autopay/customers/' + encodeURIComponent(customerNo));
+            if (res.ok) {
+                const c = await res.json();
+                const nm = c.customerNm || '-';
+                nameCache[customerNo] = nm;
+                return nm;
+            }
+        } catch (e) { /* 무시하고 고객번호만 표기 */ }
+        return '-';
+    }
+
+    async function search() {
+        const tenantId = val('tenantId');
+        const rrn = val('rrn').trim();
+        const info = document.getElementById('custInfo');
+        hide('walletCard'); hide('asOwnerCard'); hide('asUserCard');
+
+        if (!rrn) {
+            info.className = 'owner-info err';
+            info.textContent = '주민번호를 입력하세요.';
+            return;
+        }
+
+        // 1) 고객 조회
+        let cust;
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (!res.ok) {
+                info.className = 'owner-info err';
+                info.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                return;
+            }
+            cust = await res.json();
+        } catch (e) {
+            info.className = 'owner-info err';
+            info.textContent = '요청 오류: ' + e.message;
+            return;
+        }
+        nameCache[cust.customerNo] = cust.customerNm || '-';
+        info.className = 'owner-info ok';
+        info.textContent = '고객번호: ' + cust.customerNo +
+            ' / 이름: ' + (cust.customerNm || '-') +
+            ' / 이동전화: ' + (cust.mobilePhno || '-');
+
+        // 2) 지갑 + 대리관계 병렬 조회
+        await Promise.all([
+            loadWallet(tenantId, cust.customerNo),
+            loadAsOwner(tenantId, cust.customerNo),
+            loadAsUser(tenantId, cust.customerNo)
+        ]);
+    }
+
+    // 상태별 관리 버튼 (활성=정지/해지, 정지=해지, 그 외=없음)
+    function actionButtons(m) {
+        const cd = m.payMeansStatCd;
+        const no = m.payMeansNo;
+        if (cd === '10') {
+            return '<button class="act-btn warn" onclick="disableMeans(' + no + ')">정지</button>' +
+                   '<button class="act-btn danger" onclick="terminateMeans(' + no + ')">해지</button>';
+        }
+        if (cd === '20') {
+            return '<button class="act-btn ok" onclick="resumeMeans(' + no + ')">재개</button>' +
+                   '<button class="act-btn danger" onclick="terminateMeans(' + no + ')">해지</button>';
+        }
+        return '<span class="muted">-</span>';
+    }
+
+    // 현재 조회 중인 고객번호 보관 (액션 후 목록 새로고침용)
+    let currentCustomerNo = null;
+
+    // 사용중지 (10 → 20)
+    async function disableMeans(payMeansNo) {
+        if (!confirm('이 납부수단을 정지하시겠습니까?\n(정지 시 신규 대리납부 연결이 차단됩니다)')) return;
+        await postAction(payMeansNo, 'disable', '정지');
+    }
+
+    // 사용재개 (20 → 10)
+    async function resumeMeans(payMeansNo) {
+        if (!confirm('정지된 이 납부수단을 다시 사용하시겠습니까?')) return;
+        await postAction(payMeansNo, 'resume', '재개');
+    }
+
+    // 해지 (10/20 → 30)
+    async function terminateMeans(payMeansNo) {
+        if (!confirm('이 납부수단을 해지하시겠습니까?\n해지 후에는 되돌릴 수 없습니다.')) return;
+        await postAction(payMeansNo, 'terminate', '해지');
+    }
+
+    async function postAction(payMeansNo, action, actionLabel) {
+        const tenantId = val('tenantId');
+        try {
+            const res = await fetch('/api/autopay/pay-means/' + encodeURIComponent(payMeansNo) + '/' + action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenantId: tenantId })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                alert(actionLabel + ' 완료 (상태: ' + (data.payMeansStatLabel || data.payMeansStatCd || '') + ')');
+                // 목록 새로고침 (계좌번호 캐시는 유지)
+                if (currentCustomerNo) await loadWallet(tenantId, currentCustomerNo);
+            } else {
+                alert((data && data.message) ? data.message : (actionLabel + ' 실패 (' + res.status + ')'));
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+        }
+    }
+
+    // 지갑 목록
+    async function loadWallet(tenantId, customerNo) {
+        currentCustomerNo = customerNo;
+        const body = document.getElementById('walletBody');
+        show('walletCard');
+        body.innerHTML = '<div class="empty">조회 중...</div>';
+        try {
+            const url = '/api/autopay/pay-means?tenantId=' + encodeURIComponent(tenantId) +
+                '&customerNo=' + encodeURIComponent(customerNo);
+            const res = await fetch(url);
+            if (!res.ok) { body.innerHTML = '<div class="empty">조회 실패 (' + res.status + ')</div>'; return; }
+            const list = await res.json();
+            if (!list.length) { body.innerHTML = '<div class="empty">보유한 납부수단이 없습니다.</div>'; return; }
+            let html = '<table><thead><tr>' +
+                '<th>별칭</th><th>유형</th><th>은행(카드사)</th>' +
+                '<th>계좌·카드번호</th><th>예금주</th><th>상태</th><th>관리</th></tr></thead><tbody>';
+            list.forEach(m => {
+                const typeLabel = m.payMeansTypeLabel || TYPE_LABEL[m.payMeansTypeCd] || m.payMeansTypeCd;
+                html += '<tr>' +
+                    '<td>' + (m.payMeansNm || '-') + '</td>' +
+                    '<td>' + typeLabel + '</td>' +
+                    '<td>' + fincName(m.payMeansTypeCd, m.fincInstCd) + '</td>' +
+                    '<td>' + (m.accountOrCardNoMasked || '-') + '</td>' +
+                    '<td>' + (m.holderNm || '-') + '</td>' +
+                    '<td>' + statusBadge(m.payMeansStatCd, m.payMeansStatLabel) + '</td>' +
+                    '<td>' + actionButtons(m) + '</td>' +
+                    '</tr>';
+            });
+            html += '</tbody></table>';
+            body.innerHTML = html;
+        } catch (e) {
+            body.innerHTML = '<div class="empty">요청 오류: ' + e.message + '</div>';
+        }
+    }
+
+    // 소유주로서 관계: 내 수단을 남(사용자)이 쓰는 것
+    async function loadAsOwner(tenantId, customerNo) {
+        const body = document.getElementById('asOwnerBody');
+        show('asOwnerCard');
+        body.innerHTML = '<div class="empty">조회 중...</div>';
+        try {
+            const url = '/api/autopay/pay-means/agent-maps/as-owner?tenantId=' +
+                encodeURIComponent(tenantId) + '&customerNo=' + encodeURIComponent(customerNo);
+            const res = await fetch(url);
+            if (!res.ok) { body.innerHTML = '<div class="empty">조회 실패 (' + res.status + ')</div>'; return; }
+            const list = await res.json();
+            if (!list.length) { body.innerHTML = '<div class="empty">내 수단을 사용하는 대리관계가 없습니다.</div>'; return; }
+            await renderMapTable(tenantId, body, list, 'user');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">요청 오류: ' + e.message + '</div>';
+        }
+    }
+
+    // 사용자로서 관계: 남(소유주)의 수단을 내가 쓰는 것
+    async function loadAsUser(tenantId, customerNo) {
+        const body = document.getElementById('asUserBody');
+        show('asUserCard');
+        body.innerHTML = '<div class="empty">조회 중...</div>';
+        try {
+            const url = '/api/autopay/pay-means/agent-maps?tenantId=' +
+                encodeURIComponent(tenantId) + '&customerNo=' + encodeURIComponent(customerNo);
+            const res = await fetch(url);
+            if (!res.ok) { body.innerHTML = '<div class="empty">조회 실패 (' + res.status + ')</div>'; return; }
+            const list = await res.json();
+            if (!list.length) { body.innerHTML = '<div class="empty">내가 사용하는 남의 수단이 없습니다.</div>'; return; }
+            await renderMapTable(tenantId, body, list, 'owner');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">요청 오류: ' + e.message + '</div>';
+        }
+    }
+
+    // 대리관계 테이블 렌더. counterpart='user'면 상대(사용자) 열, 'owner'면 상대(소유주) 열 표시.
+    async function renderMapTable(tenantId, body, list, counterpart) {
+        const counterHeader = counterpart === 'user' ? '사용자(수익자)' : '소유주(납부자)';
+        // 상대방 이름 + 연결된 수단(계좌번호/은행명) 병렬 보강
+        const enriched = await Promise.all(list.map(async m => {
+            const counterNo = counterpart === 'user' ? m.bnfcPayerCustomerNo : m.agentPayerCustomerNo;
+            const [nm, means] = await Promise.all([
+                nameOf(tenantId, counterNo),
+                meansOf(m.payMeansNo)
+            ]);
+            const acct = means ? (means.accountOrCardNoMasked || '-') : '-';
+            const finc = means ? fincName(means.payMeansTypeCd, means.fincInstCd) : '-';
+            return { m, counterNo, nm, acct, finc };
+        }));
+        let html = '<table><thead><tr>' +
+            '<th>' + counterHeader + '</th><th>관계</th>' +
+            '<th>은행(카드사)</th><th>연결된 계좌·카드번호</th><th>상태</th><th>시작</th><th>관리</th></tr></thead><tbody>';
+        enriched.forEach(({ m, counterNo, nm, acct, finc }) => {
+            html += '<tr>' +
+                '<td>' + nm + ' (' + (counterNo || '-') + ')</td>' +
+                '<td>' + relLabel(m.relCatgCd) + '</td>' +
+                '<td>' + (finc || '-') + '</td>' +
+                '<td>' + (acct || '-') + '</td>' +
+                '<td>' + agentStatusBadge(m.statusCd, m.statusLabel) + '</td>' +
+                '<td>' + fmtDate(m.validStartDtm) + '</td>' +
+                '<td>' + agentMapActions(m) + '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table>';
+        body.innerHTML = html;
+    }
+
+    // 대리관계 관리 버튼: 진행중(요청 10)/활성(20)일 때만 해지 가능
+    // (AgentPayMap 상태코드: 요청=10, 활성=20, 거절=30, 중단=40, 종료=50)
+    function agentMapActions(m) {
+        const cd = m.statusCd;
+        if (cd === '10' || cd === '20') {
+            return '<button class="act-btn danger" onclick="terminateAgentMap(' +
+                m.agentPayMapSeqno + ')">해지</button>';
+        }
+        return '<span class="muted">-</span>';
+    }
+
+    // 대리납부 관계 해지 (AgentPayMap 종료). PayMeans 자체는 유지.
+    async function terminateAgentMap(seqno) {
+        if (!confirm('이 대리납부 관계를 해지하시겠습니까?\n해지 후에는 되돌릴 수 없습니다.\n(소유주의 납부수단 자체는 유지됩니다)')) return;
+        const tenantId = val('tenantId');
+        try {
+            const res = await fetch('/api/autopay/pay-means/agent-maps/' + encodeURIComponent(seqno) + '/terminate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenantId: tenantId })
+            });
+            if (res.ok) {
+                alert('대리납부 관계를 해지했습니다.');
+                // 현재 조회 고객 기준으로 대리관계 두 목록 새로고침
+                if (currentCustomerNo) {
+                    await Promise.all([
+                        loadAsOwner(tenantId, currentCustomerNo),
+                        loadAsUser(tenantId, currentCustomerNo)
+                    ]);
+                }
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert((data && data.message) ? data.message : ('해지 실패 (' + res.status + ')'));
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+        }
+    }
+
+    function fmtDate(v) {
+        if (!v) return '-';
+        // LocalDateTime 문자열(예: 2026-09-05T14:03:32) → 날짜+시분
+        return String(v).replace('T', ' ').substring(0, 16);
+    }
+</script>
+</body>
+</html>

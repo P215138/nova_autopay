@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기존 수단 대리납부 연결</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 640px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            margin-bottom: 18px;
+        }
+        .step-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+        button.lookup {
+            width: 100%;
+            padding: 10px;
+            background: #64748b;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button.lookup:hover { background: #475569; }
+        button.submit {
+            width: 100%;
+            margin-top: 22px;
+            padding: 12px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        button.submit:hover { background: #1d4ed8; }
+        button.submit:disabled { background: #9ca3af; cursor: not-allowed; }
+        .owner-info {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            font-size: 13px;
+            color: #445;
+        }
+        .owner-info.ok { background: #e7f6ec; color: #16794c; }
+        .owner-info.err { background: #fdecec; color: #b42318; }
+        .result {
+            margin-top: 18px;
+            padding: 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .result.ok { background: #e7f6ec; color: #16794c; display: block; }
+        .result.err { background: #fdecec; color: #b42318; display: block; }
+        /* 수단 목록 */
+        .means-list { margin-top: 12px; }
+        .means-empty { color: #889; font-size: 13px; padding: 10px 0; }
+        .means-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #e2e5ea;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .means-item:hover { border-color: #2563eb; background: #f8faff; }
+        .means-item.selected { border-color: #2563eb; background: #eef4ff; }
+        .means-item input { width: auto; }
+        .means-item .body { flex: 1; }
+        .means-item .name { font-weight: 600; font-size: 14px; }
+        .means-item .sub { font-size: 12px; color: #667; margin-top: 2px; }
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e7f6ec;
+            color: #16794c;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>기존 수단 대리납부 연결</h1>
+    <p class="desc">소유주(납부자)가 이미 등록한 납부수단을 사용자(수익자)가 사용하도록 연결합니다.
+        새 수단을 만들지 않고 기존 수단을 재인증한 뒤 소유주 동의요청을 발송합니다.</p>
+
+    <!-- STEP 1: 소유주(부모) 조회 -->
+    <div class="card">
+        <div class="step-title">STEP 1. 소유주(납부자) 조회</div>
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+
+        <label>소유주 주민번호 (납부자)</label>
+        <div class="row">
+            <div style="flex:2;">
+                <input id="ownerRrn" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:1;">
+                <button type="button" class="lookup" onclick="lookupOwner()">고객 조회</button>
+            </div>
+        </div>
+        <input type="hidden" id="ownerCustomerNo">
+        <div id="ownerInfo" class="owner-info">조회된 소유주 정보가 여기에 표시됩니다.</div>
+
+        <!-- 소유주 휴대폰: 동의요청 발송용 -->
+        <label>소유주 휴대폰번호 (동의요청 발송)</label>
+        <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+    </div>
+
+    <!-- STEP 2: 소유주의 기존 납부수단 선택 -->
+    <div class="card">
+        <div class="step-title">STEP 2. 연결가능 납부수단</div>
+        <div id="meansList" class="means-list">
+            <div class="means-empty">먼저 소유주를 조회하세요.</div>
+        </div>
+        <input type="hidden" id="selectedPayMeansNo">
+    </div>
+
+    <!-- STEP 3: 사용자(자녀) 조회 + 연결 -->
+    <div class="card">
+        <div class="step-title">STEP 3. 사용자(수익자) 정보</div>
+        <label>사용자 주민번호 (수익자)</label>
+        <div class="row">
+            <div style="flex:2;">
+                <input id="bnfcRrn" placeholder="예: 9001011234567">
+            </div>
+            <div style="flex:1;">
+                <button type="button" class="lookup" onclick="lookupBnfc()">고객 조회</button>
+            </div>
+        </div>
+        <input type="hidden" id="bnfcCustomerNo">
+        <div id="bnfcInfo" class="owner-info">사용자(수익자) 정보</div>
+
+        <label>관계 (사용자 기준)</label>
+        <select id="relCatgCd">
+            <option value="03">자녀</option>
+            <option value="01">부모</option>
+            <option value="02">배우자</option>
+            <option value="09">기타</option>
+        </select>
+
+        <button class="submit" id="submitBtn" onclick="submitLink()">기존 수단으로 대리납부 연결</button>
+        <div id="result" class="result"></div>
+    </div>
+</div>
+
+<script>
+    const TYPE_LABEL = { '01': '은행', '02': '신용카드', '05': '간편결제' };
+
+    function val(id) { return document.getElementById(id).value; }
+    function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+    function resetInfo(id, text) {
+        const el = document.getElementById(id);
+        if (el) { el.className = 'owner-info'; el.textContent = text; }
+    }
+
+    // 주민번호로 고객 조회 (공통)
+    async function lookupCustomer(rrn, infoEl, onFound) {
+        infoEl.className = 'owner-info';
+        if (!rrn) {
+            infoEl.className = 'owner-info err';
+            infoEl.textContent = '주민번호를 입력하세요.';
+            onFound(null);
+            return;
+        }
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (res.ok) {
+                const c = await res.json();
+                infoEl.className = 'owner-info ok';
+                infoEl.textContent = '고객번호: ' + c.customerNo +
+                    ' / 이름: ' + (c.customerNm || '-') +
+                    ' / 이동전화: ' + (c.mobilePhno || '-');
+                onFound(c);
+            } else {
+                infoEl.className = 'owner-info err';
+                infoEl.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                onFound(null);
+            }
+        } catch (e) {
+            infoEl.className = 'owner-info err';
+            infoEl.textContent = '요청 오류: ' + e.message;
+            onFound(null);
+        }
+    }
+
+    // STEP 1: 소유주 조회 → 소유주 지갑 목록 로딩
+    async function lookupOwner() {
+        await lookupCustomer(val('ownerRrn').trim(),
+            document.getElementById('ownerInfo'), (c) => {
+                setVal('ownerCustomerNo', c ? c.customerNo : '');
+                setVal('ownerPhoneNo', c ? (c.mobilePhno || '') : '');
+                if (c) {
+                    loadOwnerMeans(c.customerNo);
+                } else {
+                    renderMeans([]);
+                }
+            });
+    }
+
+    // STEP 2: 소유주의 납부수단 목록 조회
+    async function loadOwnerMeans(customerNo) {
+        const listEl = document.getElementById('meansList');
+        listEl.innerHTML = '<div class="means-empty">조회 중...</div>';
+        setVal('selectedPayMeansNo', '');
+        try {
+            const url = '/api/autopay/pay-means?tenantId=' + encodeURIComponent(val('tenantId')) +
+                '&customerNo=' + encodeURIComponent(customerNo);
+            const res = await fetch(url);
+            if (!res.ok) {
+                listEl.innerHTML = '<div class="means-empty">목록 조회 실패 (' + res.status + ')</div>';
+                return;
+            }
+            const list = await res.json();
+            // 활성(10) 상태 + 대리납부 가능(은행/카드)만 연결 대상
+            const linkable = list.filter(m =>
+                m.payMeansStatCd === '10' && m.payMeansTypeCd !== '05');
+            renderMeans(linkable);
+        } catch (e) {
+            listEl.innerHTML = '<div class="means-empty">요청 오류: ' + e.message + '</div>';
+        }
+    }
+
+    function renderMeans(list) {
+        const listEl = document.getElementById('meansList');
+        setVal('selectedPayMeansNo', '');
+        if (!list || list.length === 0) {
+            listEl.innerHTML = '<div class="means-empty">연결 가능한 활성 납부수단이 없습니다. ' +
+                '(활성 상태의 은행/카드만 연결 가능)</div>';
+            return;
+        }
+        listEl.innerHTML = '';
+        list.forEach(m => {
+            const item = document.createElement('label');
+            item.className = 'means-item';
+            const typeLabel = m.payMeansTypeLabel || TYPE_LABEL[m.payMeansTypeCd] || m.payMeansTypeCd;
+            item.innerHTML =
+                '<input type="radio" name="means" value="' + m.payMeansNo + '">' +
+                '<div class="body">' +
+                    '<div class="name">' + (m.payMeansNm || '(별칭 없음)') +
+                        ' <span class="badge">' + (m.payMeansStatLabel || '활성') + '</span></div>' +
+                    '<div class="sub">유형: ' + typeLabel +
+                        ' / 기관코드: ' + (m.fincInstCd || '-') +
+                        ' / 계좌·카드번호: ' + (m.accountOrCardNoMasked || '-') +
+                        ' / 예금주: ' + (m.holderNm || '-') +
+                        ' / 수단번호: ' + m.payMeansNo + '</div>' +
+                '</div>';
+            const radio = item.querySelector('input');
+            radio.addEventListener('change', () => {
+                document.querySelectorAll('.means-item').forEach(el => el.classList.remove('selected'));
+                if (radio.checked) {
+                    item.classList.add('selected');
+                    setVal('selectedPayMeansNo', m.payMeansNo);
+                }
+            });
+            listEl.appendChild(item);
+        });
+    }
+
+    // STEP 3: 사용자(자녀) 조회
+    async function lookupBnfc() {
+        await lookupCustomer(val('bnfcRrn').trim(),
+            document.getElementById('bnfcInfo'), (c) => {
+                setVal('bnfcCustomerNo', c ? c.customerNo : '');
+            });
+    }
+
+    function showResult(ok, text) {
+        const el = document.getElementById('result');
+        el.className = 'result ' + (ok ? 'ok' : 'err');
+        el.textContent = text;
+    }
+
+    // 연결 실행 → POST /api/autopay/pay-means/{no}/agent-link
+    async function submitLink() {
+        const payMeansNo = val('selectedPayMeansNo');
+        const ownerNo = val('ownerCustomerNo');
+        const bnfcNo = val('bnfcCustomerNo');
+        const ownerPhone = val('ownerPhoneNo');
+
+        if (!ownerNo) { showResult(false, 'STEP 1: 소유주를 먼저 조회하세요.'); return; }
+        if (!payMeansNo) { showResult(false, 'STEP 2: 연결할 납부수단을 선택하세요.'); return; }
+        if (!bnfcNo) { showResult(false, 'STEP 3: 사용자(자녀)를 조회하세요.'); return; }
+        if (ownerNo === bnfcNo) { showResult(false, '소유주와 사용자가 동일합니다. 다른 사용자를 선택하세요.'); return; }
+
+        const body = {
+            tenantId: val('tenantId'),
+            agentPayerCustomerNo: ownerNo,   // 소유주(부모)
+            bnfcPayerCustomerNo: bnfcNo,     // 사용자(자녀)
+            relCatgCd: val('relCatgCd'),
+            ownerPhoneNo: ownerPhone
+        };
+
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/autopay/pay-means/' + encodeURIComponent(payMeansNo) + '/agent-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showResult(true,
+                    '연결 요청 완료 (재인증 성공 + 소유주 동의요청 발송)\n' +
+                    '납부수단번호: ' + data.payMeansNo + '\n' +
+                    '상태: ' + data.payMeansStatCd + ' (' + data.payMeansStatLabel + ')' +
+                    (data.agentPayMapSeqno ? '\n대리납부맵: ' + data.agentPayMapSeqno + ' (소유주 동의 대기)' : ''));
+            } else {
+                const msg = (data && data.message) ? data.message : ('연결 실패 (' + res.status + ')');
+                alert(msg);
+                showResult(false, msg);
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+            showResult(false, '요청 오류: ' + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

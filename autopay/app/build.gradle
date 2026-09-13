@@ -1,0 +1,14 @@
+// app - core + orchestration + presentation + external 통합 모듈
+// BE Architecture 간소화(2026-09-10) 결과
+dependencies {
+    implementation project(':contract')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // MyBatis-Plus (Spring Boot 3 / Jakarta 대응)
+    implementation "com.baomidou:mybatis-plus-spring-boot3-starter:${mybatisPlusVersion}"
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
+}

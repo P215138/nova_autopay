@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: autopay
+  devtools:
+    restart:
+      enabled: true       # 코드 변경 시 자동 재시작
+    livereload:
+      enabled: true       # 브라우저 라이브 리로드
+  web:
+    resources:
+      # [개발용] src 의 정적 파일을 우선 서빙 → 빌드 없이 HTML/JS 새로고침만으로 반영.
+      #  - 앞의 file: 경로를 먼저 탐색하고, 없으면 classpath(=build 사본)로 폴백한다.
+      #  - working directory 가 프로젝트 루트/모듈 루트 어느 쪽이어도 맞도록 두 상대경로 + 절대경로를 함께 등록.
+      #  - 운영 배포 시에는 file: 경로들을 제거하고 classpath:/static/ 만 남길 것.
+      static-locations:
+        - file:./boot/src/main/resources/static/
+        - file:./src/main/resources/static/
+        - file:c:/nova/autopay/boot/src/main/resources/static/
+        - classpath:/static/
+      cache:
+        period: 0         # 정적 리소스 캐시 비활성화 (HTML/JS 즉시 반영)
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/nova_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: P215138
+    password: ${DB_PASSWORD:park2019**}
+
+server:
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: input
+
+# 외부 금융기관 REST 연동 (client-rest / rest-live 프로파일에서 사용)
+autopay:
+  external:
+    finance:
+      base-url: ${FINANCE_API_BASE_URL:http://localhost:9900}

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>납부수단 등록</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            margin: 0;
+            padding: 24px;
+            color: #222;
+        }
+        .container { max-width: 560px; margin: 0 auto; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .desc { color: #667; font-size: 13px; margin-bottom: 20px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        label { display: block; font-size: 13px; margin: 14px 0 6px; font-weight: 600; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+        #agentFields { display: none; }
+        button.submit {
+            width: 100%;
+            margin-top: 22px;
+            padding: 12px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        button.submit:hover { background: #1d4ed8; }
+        .result {
+            margin-top: 18px;
+            padding: 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .result.ok { background: #e7f6ec; color: #16794c; display: block; }
+        .result.err { background: #fdecec; color: #b42318; display: block; }
+        .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+        .checkbox-row input { width: auto; }
+        .section-title {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px dashed #d0d3d8;
+            font-size: 13px;
+            font-weight: 700;
+            color: #2563eb;
+        }
+        button.lookup {
+            width: 100%;
+            padding: 10px;
+            background: #64748b;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button.lookup:hover { background: #475569; }
+        .owner-info {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            font-size: 13px;
+            color: #445;
+        }
+        .owner-info.ok { background: #e7f6ec; color: #16794c; }
+        .owner-info.err { background: #fdecec; color: #b42318; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>납부수단 등록</h1>
+    <p class="desc">은행 계좌 / 신용카드를 인증 후 지갑에 등록합니다. (인증은 스텁으로 항상 성공)</p>
+
+    <div class="card">
+        <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
+        <input type="hidden" id="tenantId" value="SKT">
+
+        <!-- 소유주 주민번호 조회 (공통: 본인=등록자, 대리인=대리납부자/소유주) -->
+        <label>소유주 주민번호</label>
+        <div class="row">
+            <div style="flex:2;">
+                <input id="ownerRrn" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:1;">
+                <button type="button" class="lookup" onclick="lookupOwner()">고객 조회</button>
+            </div>
+        </div>
+        <input type="hidden" id="customerNo">
+        <div id="ownerInfo" class="owner-info">조회된 고객 정보가 여기에 표시됩니다.</div>
+
+        <!-- 관계: 소유주 주민번호 뒤 -->
+        <label>관계 (등록자 기준)</label>
+        <select id="relCatgCd" onchange="toggleRelation()">
+            <option value="SELF">본인</option>
+            <option value="01">부모</option>
+            <option value="02">배우자</option>
+            <option value="03">자녀</option>
+        </select>
+
+        <!-- 대리인 등록: 본인이 아닐 때만 표시 (피대리납부자 = 사용자) -->
+        <div id="agentFields">
+            <div class="section-title">대리인 등록 정보</div>
+
+            <label>피대리납부자 주민번호 (사용자 · 혜택 받는 사람)</label>
+            <div class="row">
+                <div style="flex:2;">
+                    <input id="bnfcPayerRrn" placeholder="예: 9001011234567">
+                </div>
+                <div style="flex:1;">
+                    <button type="button" class="lookup" onclick="lookupBnfcPayer()">고객 조회</button>
+                </div>
+            </div>
+            <input type="hidden" id="bnfcPayerCustomerNo">
+            <div id="bnfcPayerInfo" class="owner-info">피대리납부자(사용자) 정보</div>
+
+            <label>소유주 휴대폰번호 (동의요청 발송)</label>
+            <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+            <div class="checkbox-row">
+                <input type="checkbox" id="faceToFace">
+                <label for="faceToFace" style="margin:0;font-weight:400;">대면 등록 (체크 시 즉시 활성, 미체크 시 비대면 동의 대기)</label>
+            </div>
+        </div>
+
+        <label>납부수단 유형</label>
+        <select id="payMeansTypeCd" onchange="toggleCardField()">
+            <option value="01">은행</option>
+            <option value="02">신용카드</option>
+            <option value="05">간편결제 (대리납부 불가)</option>
+        </select>
+
+        <label>납부수단 별칭</label>
+        <input id="payMeansNm" placeholder="예: 급여통장">
+
+        <label id="fincLabel">은행</label>
+        <select id="fincInstCd"></select>
+
+        <label id="acctLabel">계좌번호</label>
+        <input id="accountOrCardNo" placeholder="계좌 또는 카드번호">
+
+        <div id="cardValidWrap" style="display:none;">
+            <label>카드 유효기간 (YYMM)</label>
+            <input id="cardValidYymm" placeholder="예: 2812">
+        </div>
+
+        <label>예금주/카드주 명</label>
+        <input id="holderNm" placeholder="예: 홍길동">
+
+        <button class="submit" onclick="submitForm()">등록하기</button>
+
+        <div id="result" class="result"></div>
+    </div>
+</div>
+
+<script>
+    // 은행 코드 (금융결제원 표준 기반, 실제 회사 표준으로 교체 가능)
+    const BANK_CODES = [
+        { code: '002', name: '산업은행' },
+        { code: '003', name: '기업은행' },
+        { code: '004', name: '국민은행' },
+        { code: '007', name: '수협은행' },
+        { code: '011', name: '농협은행' },
+        { code: '020', name: '우리은행' },
+        { code: '023', name: 'SC제일은행' },
+        { code: '027', name: '한국씨티은행' },
+        { code: '031', name: '대구은행' },
+        { code: '032', name: '부산은행' },
+        { code: '034', name: '광주은행' },
+        { code: '035', name: '제주은행' },
+        { code: '037', name: '전북은행' },
+        { code: '039', name: '경남은행' },
+        { code: '045', name: '새마을금고' },
+        { code: '048', name: '신협' },
+        { code: '071', name: '우체국' },
+        { code: '081', name: '하나은행' },
+        { code: '088', name: '신한은행' },
+        { code: '089', name: '케이뱅크' },
+        { code: '090', name: '카카오뱅크' },
+        { code: '092', name: '토스뱅크' }
+    ];
+
+    // 카드사 코드 (통용 코드 기반, 실제 회사 표준으로 교체 가능)
+    const CARD_CODES = [
+        { code: '01', name: 'KB국민카드' },
+        { code: '02', name: '신한카드' },
+        { code: '03', name: '삼성카드' },
+        { code: '04', name: '현대카드' },
+        { code: '05', name: '롯데카드' },
+        { code: '06', name: '우리카드' },
+        { code: '07', name: '하나카드' },
+        { code: '08', name: 'BC카드' },
+        { code: '09', name: 'NH농협카드' },
+        { code: '10', name: '씨티카드' }
+    ];
+
+    // 간편결제 코드
+    const SIMPLE_PAY_CODES = [
+        { code: 'KP', name: '카카오페이' },
+        { code: 'NP', name: '네이버페이' },
+        { code: 'TP', name: '토스페이' }
+    ];
+
+    function fillFincOptions() {
+        const type = document.getElementById('payMeansTypeCd').value;
+        let list, label;
+        if (type === '02') { list = CARD_CODES; label = '카드사'; }
+        else if (type === '05') { list = SIMPLE_PAY_CODES; label = '간편결제사'; }
+        else { list = BANK_CODES; label = '은행'; }
+
+        document.getElementById('fincLabel').textContent = label;
+        const sel = document.getElementById('fincInstCd');
+        sel.innerHTML = '';
+        list.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.code;
+            opt.textContent = item.name + ' (' + item.code + ')';
+            sel.appendChild(opt);
+        });
+    }
+
+    // 고객 조회 아래쪽 납부수단 입력 항목 초기화 (유형/별칭/기관/번호/유효기간/예금주/결과)
+    function resetMeansFields() {
+        document.getElementById('payMeansTypeCd').value = '01';
+        setVal('payMeansNm', '');
+        setVal('accountOrCardNo', '');
+        setVal('cardValidYymm', '');
+        setVal('holderNm', '');
+        // 유형에 따른 라벨/기관목록/카드유효기간 표시 재설정
+        toggleCardField();
+        const result = document.getElementById('result');
+        if (result) { result.className = 'result'; result.textContent = ''; }
+    }
+
+    // 소유주 주민번호 조회 → 고객번호/휴대폰/예금주 채움 (본인=등록자, 대리인=대리납부자/소유주 공통)
+    async function lookupOwner() {
+        const rrn = val('ownerRrn').trim();
+        const info = document.getElementById('ownerInfo');
+        document.getElementById('customerNo').value = '';
+        // 고객 조회 시 아래 입력 항목은 항상 초기화
+        resetMeansFields();
+        setVal('ownerPhoneNo', '');
+        if (!rrn) {
+            info.className = 'owner-info err';
+            info.textContent = '주민번호를 입력하세요.';
+            return;
+        }
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (res.ok) {
+                const c = await res.json();
+                document.getElementById('customerNo').value = c.customerNo;
+                info.className = 'owner-info ok';
+                info.textContent = '고객번호: ' + c.customerNo +
+                    ' / 이름: ' + (c.customerNm || '-') +
+                    ' / 이동전화: ' + (c.mobilePhno || '-');
+                // 소유주 휴대폰(동의요청 발송용) 자동 입력
+                setVal('ownerPhoneNo', c.mobilePhno || '');
+                // 예금주명 자동 채움 (초기화 직후이므로 조회된 이름으로 설정)
+                document.getElementById('holderNm').value = c.customerNm || '';
+            } else {
+                info.className = 'owner-info err';
+                info.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+            }
+        } catch (e) {
+            info.className = 'owner-info err';
+            info.textContent = '요청 오류: ' + e.message;
+        }
+    }
+
+    // 공통 고객 조회 헬퍼: 주민번호로 조회 → 콜백으로 결과 전달
+    async function lookupCustomer(rrn, infoEl, onFound) {
+        infoEl.className = 'owner-info';
+        if (!rrn) {
+            infoEl.className = 'owner-info err';
+            infoEl.textContent = '주민번호를 입력하세요.';
+            onFound(null);
+            return;
+        }
+        try {
+            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            if (res.ok) {
+                const c = await res.json();
+                infoEl.className = 'owner-info ok';
+                infoEl.textContent = '고객번호: ' + c.customerNo +
+                    ' / 이름: ' + (c.customerNm || '-') +
+                    ' / 이동전화: ' + (c.mobilePhno || '-');
+                onFound(c);
+            } else {
+                infoEl.className = 'owner-info err';
+                infoEl.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                onFound(null);
+            }
+        } catch (e) {
+            infoEl.className = 'owner-info err';
+            infoEl.textContent = '요청 오류: ' + e.message;
+            onFound(null);
+        }
+    }
+
+    // 피대리납부자(사용자) 조회 → 고객번호 (납부수단/소유주 입력은 건드리지 않음)
+    async function lookupBnfcPayer() {
+        await lookupCustomer(val('bnfcPayerRrn').trim(),
+            document.getElementById('bnfcPayerInfo'), (c) => {
+                document.getElementById('bnfcPayerCustomerNo').value = c ? c.customerNo : '';
+            });
+    }
+
+    function isSelf() {
+        return document.getElementById('relCatgCd').value === 'SELF';
+    }
+
+    function toggleRelation() {
+        // 소유주 조회 영역은 항상 표시. 관계가 본인이 아닐 때만 대리인(피대리납부자) 영역 노출.
+        document.getElementById('agentFields').style.display = isSelf() ? 'none' : 'block';
+        resetRelationFields();
+    }
+
+    // 관계 변경 시 대리인(피대리납부자) 항목만 초기화. 소유주 조회 결과는 유지.
+    function resetRelationFields() {
+        setVal('bnfcPayerRrn', '');
+        setVal('bnfcPayerCustomerNo', '');
+        resetInfo('bnfcPayerInfo', '피대리납부자(사용자) 정보');
+        const ftf = document.getElementById('faceToFace');
+        if (ftf) ftf.checked = false;
+
+        // 결과 표시 초기화
+        const result = document.getElementById('result');
+        if (result) { result.className = 'result'; result.textContent = ''; }
+    }
+
+    function setVal(id, v) {
+        const el = document.getElementById(id);
+        if (el) el.value = v;
+    }
+
+    function resetInfo(id, text) {
+        const el = document.getElementById(id);
+        if (el) { el.className = 'owner-info'; el.textContent = text; }
+    }
+
+    function toggleCardField() {
+        const type = document.getElementById('payMeansTypeCd').value;
+        const isCard = (type === '02');
+        document.getElementById('cardValidWrap').style.display = isCard ? 'block' : 'none';
+        document.getElementById('acctLabel').textContent = isCard ? '카드번호' : '계좌번호';
+        fillFincOptions();
+    }
+
+    // 페이지 로드 시 초기 금융기관 목록 채움
+    window.addEventListener('DOMContentLoaded', fillFincOptions);
+
+    function showResult(ok, text) {
+        const el = document.getElementById('result');
+        el.className = 'result ' + (ok ? 'ok' : 'err');
+        el.textContent = text;
+    }
+
+    async function submitForm() {
+        const tenantId = val('tenantId');
+        const common = {
+            tenantId: tenantId,
+            payMeansTypeCd: val('payMeansTypeCd'),
+            payMeansNm: val('payMeansNm'),
+            fincInstCd: val('fincInstCd'),
+            accountOrCardNo: val('accountOrCardNo'),
+            holderNm: val('holderNm'),
+            cardValidYymm: val('cardValidYymm')
+        };
+
+        let url, body;
+        if (isSelf()) {
+            const customerNo = val('customerNo');
+            if (!customerNo) {
+                showResult(false, '먼저 주민번호로 [고객 조회]를 눌러 고객을 확인하세요.');
+                return;
+            }
+            url = '/api/autopay/pay-means';
+            body = { ...common, customerNo: customerNo };
+        } else {
+            // 소유주(대리납부자) = 위쪽 공통 조회 결과, 피대리납부자 = 사용자
+            const agentNo = val('customerNo');
+            const bnfcNo = val('bnfcPayerCustomerNo');
+            if (!agentNo) {
+                showResult(false, '먼저 소유주 주민번호로 [고객 조회]를 눌러 소유주를 확인하세요.');
+                return;
+            }
+            if (!bnfcNo) {
+                showResult(false, '피대리납부자 주민번호로 [고객 조회]를 눌러 사용자를 확인하세요.');
+                return;
+            }
+            if (agentNo === bnfcNo) {
+                showResult(false, '소유주와 피대리납부자가 동일합니다. 다른 사용자를 선택하세요.');
+                return;
+            }
+            url = '/api/autopay/pay-means/agent-requests';
+            body = {
+                ...common,
+                agentPayerCustomerNo: agentNo,
+                bnfcPayerCustomerNo: bnfcNo,
+                relCatgCd: val('relCatgCd'),
+                ownerPhoneNo: val('ownerPhoneNo'),
+                faceToFace: document.getElementById('faceToFace').checked
+            };
+        }
+
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showResult(true,
+                    '등록 성공\n' +
+                    '납부수단번호: ' + data.payMeansNo + '\n' +
+                    '상태: ' + data.payMeansStatCd + ' (' + data.payMeansStatLabel + ')' +
+                    (data.agentPayMapSeqno ? '\n대리납부맵: ' + data.agentPayMapSeqno : ''));
+            } else {
+                // 서버가 준 message가 있으면 팝업으로, 없으면 기본 메시지
+                const msg = (data && data.message) ? data.message : ('등록 실패 (' + res.status + ')');
+                alert(msg);
+                showResult(false, msg);
+            }
+        } catch (e) {
+            alert('요청 오류: ' + e.message);
+            showResult(false, '요청 오류: ' + e.message);
+        }
+    }
+
+    function val(id) {
+        return document.getElementById(id).value;
+    }
+</script>
+</body>
+</html>

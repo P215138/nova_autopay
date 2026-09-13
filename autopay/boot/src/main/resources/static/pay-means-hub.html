@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>납부수단 관리 (통합)</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+            background: #f4f5f7;
+            color: #222;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .hub-header {
+            padding: 20px 24px 0;
+            flex-shrink: 0;
+        }
+        .hub-header h1 { font-size: 20px; margin: 0 0 4px; }
+        .hub-header .desc { color: #667; font-size: 13px; margin: 0 0 14px; }
+        /* 탭 */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 2px solid #e2e5ea;
+        }
+        .tab {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #667;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            cursor: pointer;
+        }
+        .tab:hover { color: #2563eb; }
+        .tab.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+        }
+        /* 탭 내용 (iframe 컨테이너) */
+        .tab-body {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+        .tab-body iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #f4f5f7;
+            display: none;
+        }
+        .tab-body iframe.active { display: block; }
+    </style>
+</head>
+<body>
+<div class="hub-header">
+    <h1>납부수단 관리</h1>
+    <p class="desc">신규 납부수단 등록과 기존 수단 대리납부 연결을 한 화면에서 처리합니다.</p>
+    <div class="tabs">
+        <button class="tab active" data-target="frmRegister">신규 등록 (본인 / 대리인)</button>
+        <button class="tab" data-target="frmLink">기존 수단 대리납부 연결</button>
+    </div>
+</div>
+
+<div class="tab-body">
+    <!-- 기존 화면을 그대로 임베드 → 로직 중복 없이 항상 최신본과 동기화 -->
+    <iframe id="frmRegister" class="active" src="pay-means.html" title="신규 등록"></iframe>
+    <iframe id="frmLink" src="agent-link.html" title="기존 수단 대리납부 연결"></iframe>
+</div>
+
+<script>
+    const tabs = document.querySelectorAll('.tab');
+    const frames = {
+        frmRegister: document.getElementById('frmRegister'),
+        frmLink: document.getElementById('frmLink')
+    };
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            Object.values(frames).forEach(f => f.classList.remove('active'));
+            const target = frames[tab.dataset.target];
+            if (target) target.classList.add('active');
+        });
+    });
+</script>
+</body>
+</html>

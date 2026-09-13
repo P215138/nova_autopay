@@ -1,0 +1,7 @@
+// client-message - 외부 시스템 메시지(MQ/EAI) 연동 어댑터
+dependencies {
+    implementation project(':contract')
+    implementation project(':app')
+
+    implementation 'org.springframework.boot:spring-boot-starter'
+}

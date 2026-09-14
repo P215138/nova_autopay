@@ -443,3 +443,26 @@ CREATE TABLE BANKACCT_CARD_INFO (
     FINAL_CHGR_ID               VARCHAR(20)            COMMENT '최종변경자ID',
     PRIMARY KEY (BANKACCT_CARD_ALTRNATE_ID)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='계좌카드정보 금고';
+
+-- --------------------------------------------------------------------------
+-- 13. 서비스 (SERVICE) — 이동전화 서비스
+--    현행 클리모델 엔티티정보 기준 (기준일시 2026-08-27).
+--    Oracle 타입 매핑: NUMBER->BIGINT, VARCHAR2->VARCHAR, DATE->DATETIME
+--    · SERVICE_MGMT_NO : 1로 시작하는 10자리 자동채번(애플리케이션 채번)
+--    · BILLING_ACCOUNT_NO : 청구계정번호 (BILLING_ACCOUNT 와 연동)
+--    · SERVICE_STAT_CD : AC 사용중 / TG 해지 / SP 정지
+-- --------------------------------------------------------------------------
+CREATE TABLE SERVICE (
+    SERVICE_MGMT_NO         VARCHAR(10)   NOT NULL COMMENT '서비스관리번호(PK, 1로 시작 10자리)',
+    TENANT_ID               VARCHAR(10)   NOT NULL COMMENT '테넌트ID',
+    BILLING_ACCOUNT_NO      VARCHAR(20)   NOT NULL COMMENT '청구계정번호(BILLING_ACCOUNT 연동)',
+    SERVICE_NO_ALTRNATE_ID  VARCHAR(128)  NOT NULL COMMENT '서비스번호대체ID',
+    SERVICE_STAT_CD         VARCHAR(2)             COMMENT '서비스상태코드(AC 사용중/TG 해지/SP 정지)',
+    FIRST_REGIST_DTM        DATETIME      NOT NULL COMMENT '최초등록일시',
+    FIRST_REGISTR_ID        VARCHAR(20)   NOT NULL COMMENT '최초등록자ID',
+    FINAL_CHG_DTM           DATETIME      NOT NULL COMMENT '최종변경일시',
+    FINAL_CHGR_ID           VARCHAR(20)   NOT NULL COMMENT '최종변경자ID',
+    PRIMARY KEY (SERVICE_MGMT_NO),
+    KEY IDX_SERVICE_BILLING (BILLING_ACCOUNT_NO),
+    KEY IDX_SERVICE_TENANT (TENANT_ID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='서비스(이동전화)';

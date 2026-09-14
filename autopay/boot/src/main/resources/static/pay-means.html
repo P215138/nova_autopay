@@ -32,7 +32,15 @@
         }
         .row { display: flex; gap: 12px; }
         .row > div { flex: 1; }
-        #agentFields { display: none; }
+        /* 대리인 정보 입력 영역: 시각적으로 구분 (연한 배경 + 테두리) */
+        #agentFields {
+            display: none;
+            margin-top: 16px;
+            padding: 4px 16px 16px;
+            background: #f8faff;
+            border: 1px solid #d9e2f2;
+            border-radius: 8px;
+        }
         button.submit {
             width: 100%;
             margin-top: 22px;
@@ -65,6 +73,13 @@
             font-weight: 700;
             color: #2563eb;
         }
+        /* 대리인 박스 안의 제목은 점선/상단여백 없이 깔끔하게 */
+        #agentFields .section-title {
+            margin-top: 12px;
+            padding-top: 0;
+            border-top: none;
+            font-size: 14px;
+        }
         button.lookup {
             width: 100%;
             padding: 10px;
@@ -86,6 +101,32 @@
         }
         .owner-info.ok { background: #e7f6ec; color: #16794c; }
         .owner-info.err { background: #fdecec; color: #b42318; }
+        /* 조회기준 콤보: 입력란과 톤을 맞춘 자연스러운 스타일 */
+        select.lookup-type {
+            width: auto;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            padding: 10px 12px;
+        }
+        select.lookup-type option { background: #fff; color: #222; }
+        /* 입력 항목 왼쪽에 붙는 라벨 박스 (조회구분 콤보와 동일 톤) */
+        .field-box {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+        /* 입력란 아래 안내 문구 (작은 회색) */
+        .field-hint { font-size: 12px; color: #8a94a3; margin: 6px 0 0; }
     </style>
 </head>
 <body>
@@ -97,14 +138,19 @@
         <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
         <input type="hidden" id="tenantId" value="SKT">
 
-        <!-- 소유주 주민번호 조회 (공통: 본인=등록자, 대리인=대리납부자/소유주) -->
-        <label>소유주 주민번호</label>
-        <div class="row">
-            <div style="flex:2;">
-                <input id="ownerRrn" placeholder="예: 6808231247113">
+        <!-- 소유주 조회 (콤보=조회기준, 입력, 버튼 한 라인). 본인=등록자, 대리인=대리납부자/소유주 -->
+        <div class="row" style="align-items:center; margin-top:14px;">
+            <div style="flex:0 0 auto;">
+                <select id="lookupType" class="lookup-type" onchange="onLookupTypeChange()">
+                    <option value="RRN">주민번호</option>
+                    <option value="SVC">서비스번호</option>
+                </select>
             </div>
             <div style="flex:1;">
-                <button type="button" class="lookup" onclick="lookupOwner()">고객 조회</button>
+                <input id="ownerKey" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:0 0 auto;">
+                <button type="button" class="lookup" onclick="lookupOwner()">조회</button>
             </div>
         </div>
         <input type="hidden" id="customerNo">
@@ -123,20 +169,31 @@
         <div id="agentFields">
             <div class="section-title">대리인 등록 정보</div>
 
-            <label>피대리납부자 주민번호 (사용자 · 혜택 받는 사람)</label>
-            <div class="row">
-                <div style="flex:2;">
-                    <input id="bnfcPayerRrn" placeholder="예: 9001011234567">
+            <label>(사용자 · 혜택 받는 사람)</label>
+            <div class="row" style="align-items:center;">
+                <div style="flex:0 0 auto;">
+                    <select id="bnfcLookupType" class="lookup-type" onchange="onBnfcTypeChange()">
+                        <option value="RRN">주민번호</option>
+                        <option value="SVC">서비스번호</option>
+                    </select>
                 </div>
                 <div style="flex:1;">
-                    <button type="button" class="lookup" onclick="lookupBnfcPayer()">고객 조회</button>
+                    <input id="bnfcPayerKey" placeholder="예: 9001011234567">
+                </div>
+                <div style="flex:0 0 auto;">
+                    <button type="button" class="lookup" onclick="lookupBnfcPayer()">조회</button>
                 </div>
             </div>
             <input type="hidden" id="bnfcPayerCustomerNo">
             <div id="bnfcPayerInfo" class="owner-info">피대리납부자(사용자) 정보</div>
 
-            <label>소유주 휴대폰번호 (동의요청 발송)</label>
-            <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+            <div class="row" style="align-items:flex-start; margin-top:10px;">
+                <div style="flex:0 0 auto;"><span class="field-box">이동전화번호</span></div>
+                <div style="flex:1;">
+                    <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+                    <p class="field-hint">소유주에게 동의요청 SMS가 발송됩니다.</p>
+                </div>
+            </div>
             <div class="checkbox-row">
                 <input type="checkbox" id="faceToFace">
                 <label for="faceToFace" style="margin:0;font-weight:400;">대면 등록 (체크 시 즉시 활성, 미체크 시 비대면 동의 대기)</label>
@@ -252,21 +309,38 @@
         if (result) { result.className = 'result'; result.textContent = ''; }
     }
 
-    // 소유주 주민번호 조회 → 고객번호/휴대폰/예금주 채움 (본인=등록자, 대리인=대리납부자/소유주 공통)
+    // 조회구분 변경 시 입력 placeholder/초기화
+    function onLookupTypeChange() {
+        const type = val('lookupType');
+        const keyEl = document.getElementById('ownerKey');
+        keyEl.value = '';
+        keyEl.placeholder = (type === 'SVC') ? '예: 01012345678 (서비스번호)' : '예: 6808231247113 (주민번호)';
+        document.getElementById('customerNo').value = '';
+        resetMeansFields();
+        setVal('ownerPhoneNo', '');
+        resetInfo('ownerInfo', '조회된 고객 정보가 여기에 표시됩니다.');
+    }
+
+    // 소유주 조회 → 고객번호/휴대폰/예금주 채움. 조회구분(주민번호/서비스번호)에 따라 API 분기.
     async function lookupOwner() {
-        const rrn = val('ownerRrn').trim();
+        const type = val('lookupType');
+        const key = val('ownerKey').trim();
         const info = document.getElementById('ownerInfo');
         document.getElementById('customerNo').value = '';
         // 고객 조회 시 아래 입력 항목은 항상 초기화
         resetMeansFields();
         setVal('ownerPhoneNo', '');
-        if (!rrn) {
+        if (!key) {
             info.className = 'owner-info err';
-            info.textContent = '주민번호를 입력하세요.';
+            info.textContent = (type === 'SVC') ? '서비스번호를 입력하세요.' : '주민번호를 입력하세요.';
             return;
         }
+        // 조회구분별 API URL
+        const url = (type === 'SVC')
+            ? '/api/autopay/services/by-service-no?serviceNo=' + encodeURIComponent(key)
+            : '/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(key);
         try {
-            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            const res = await fetch(url);
             if (res.ok) {
                 const c = await res.json();
                 document.getElementById('customerNo').value = c.customerNo;
@@ -280,7 +354,9 @@
                 document.getElementById('holderNm').value = c.customerNm || '';
             } else {
                 info.className = 'owner-info err';
-                info.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                info.textContent = (type === 'SVC')
+                    ? '조회 실패: 해당 서비스번호로 연결된 고객이 없습니다.'
+                    : '조회 실패: 해당 주민번호의 고객이 없습니다.';
             }
         } catch (e) {
             info.className = 'owner-info err';
@@ -289,16 +365,19 @@
     }
 
     // 공통 고객 조회 헬퍼: 주민번호로 조회 → 콜백으로 결과 전달
-    async function lookupCustomer(rrn, infoEl, onFound) {
+    async function lookupCustomer(type, key, infoEl, onFound) {
         infoEl.className = 'owner-info';
-        if (!rrn) {
+        if (!key) {
             infoEl.className = 'owner-info err';
-            infoEl.textContent = '주민번호를 입력하세요.';
+            infoEl.textContent = (type === 'SVC') ? '서비스번호를 입력하세요.' : '주민번호를 입력하세요.';
             onFound(null);
             return;
         }
+        const url = (type === 'SVC')
+            ? '/api/autopay/services/by-service-no?serviceNo=' + encodeURIComponent(key)
+            : '/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(key);
         try {
-            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            const res = await fetch(url);
             if (res.ok) {
                 const c = await res.json();
                 infoEl.className = 'owner-info ok';
@@ -308,7 +387,9 @@
                 onFound(c);
             } else {
                 infoEl.className = 'owner-info err';
-                infoEl.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                infoEl.textContent = (type === 'SVC')
+                    ? '조회 실패: 해당 서비스번호로 연결된 고객이 없습니다.'
+                    : '조회 실패: 해당 주민번호의 고객이 없습니다.';
                 onFound(null);
             }
         } catch (e) {
@@ -318,9 +399,19 @@
         }
     }
 
+    // 피대리납부자 조회구분 변경 시 입력 placeholder/초기화
+    function onBnfcTypeChange() {
+        const t = val('bnfcLookupType');
+        const el = document.getElementById('bnfcPayerKey');
+        el.value = '';
+        el.placeholder = (t === 'SVC') ? '예: 01012345678 (서비스번호)' : '예: 9001011234567 (주민번호)';
+        setVal('bnfcPayerCustomerNo', '');
+        resetInfo('bnfcPayerInfo', '피대리납부자(사용자) 정보');
+    }
+
     // 피대리납부자(사용자) 조회 → 고객번호 (납부수단/소유주 입력은 건드리지 않음)
     async function lookupBnfcPayer() {
-        await lookupCustomer(val('bnfcPayerRrn').trim(),
+        await lookupCustomer(val('bnfcLookupType'), val('bnfcPayerKey').trim(),
             document.getElementById('bnfcPayerInfo'), (c) => {
                 document.getElementById('bnfcPayerCustomerNo').value = c ? c.customerNo : '';
             });
@@ -338,7 +429,7 @@
 
     // 관계 변경 시 대리인(피대리납부자) 항목만 초기화. 소유주 조회 결과는 유지.
     function resetRelationFields() {
-        setVal('bnfcPayerRrn', '');
+        setVal('bnfcPayerKey', '');
         setVal('bnfcPayerCustomerNo', '');
         resetInfo('bnfcPayerInfo', '피대리납부자(사용자) 정보');
         const ftf = document.getElementById('faceToFace');

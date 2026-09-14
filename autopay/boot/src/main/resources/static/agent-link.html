@@ -110,6 +110,33 @@
             background: #e7f6ec;
             color: #16794c;
         }
+        /* 조회기준 콤보: 입력란과 톤을 맞춘 자연스러운 스타일 */
+        select.lookup-type {
+            width: auto;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+        select.lookup-type option { background: #fff; color: #222; }
+        /* 입력란 아래 안내 문구 (작은 회색) */
+        .field-hint { font-size: 12px; color: #8a94a3; margin: 6px 0 0; }
+        /* 입력 항목 왼쪽에 붙는 라벨 박스 (조회구분 콤보와 동일 톤) */
+        .field-box {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -118,60 +145,79 @@
     <p class="desc">소유주(납부자)가 이미 등록한 납부수단을 사용자(수익자)가 사용하도록 연결합니다.
         새 수단을 만들지 않고 기존 수단을 재인증한 뒤 소유주 동의요청을 발송합니다.</p>
 
-    <!-- STEP 1: 소유주(부모) 조회 -->
+    <!-- 소유주(납부자) 조회 -->
     <div class="card">
-        <div class="step-title">STEP 1. 소유주(납부자) 조회</div>
+        <div class="step-title">소유주(납부자) 조회</div>
         <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
         <input type="hidden" id="tenantId" value="SKT">
 
-        <label>소유주 주민번호 (납부자)</label>
-        <div class="row">
-            <div style="flex:2;">
-                <input id="ownerRrn" placeholder="예: 6808231247113">
+        <div class="row" style="align-items:center;">
+            <div style="flex:0 0 auto;">
+                <select id="ownerLookupType" class="lookup-type" onchange="onOwnerTypeChange()">
+                    <option value="RRN">주민번호</option>
+                    <option value="SVC">서비스번호</option>
+                </select>
             </div>
             <div style="flex:1;">
-                <button type="button" class="lookup" onclick="lookupOwner()">고객 조회</button>
+                <input id="ownerKey" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:0 0 auto;">
+                <button type="button" class="lookup" onclick="lookupOwner()">조회</button>
             </div>
         </div>
         <input type="hidden" id="ownerCustomerNo">
         <div id="ownerInfo" class="owner-info">조회된 소유주 정보가 여기에 표시됩니다.</div>
 
-        <!-- 소유주 휴대폰: 동의요청 발송용 -->
-        <label>소유주 휴대폰번호 (동의요청 발송)</label>
-        <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+        <!-- 소유주 이동전화번호: 동의요청 발송용 -->
+        <div class="row" style="align-items:flex-start; margin-top:10px;">
+            <div style="flex:0 0 auto;"><span class="field-box">이동전화번호</span></div>
+            <div style="flex:1;">
+                <input id="ownerPhoneNo" placeholder="소유주 조회 시 자동 입력">
+                <p class="field-hint">소유주에게 동의요청 SMS가 발송됩니다.</p>
+            </div>
+        </div>
     </div>
 
-    <!-- STEP 2: 소유주의 기존 납부수단 선택 -->
+    <!-- 연결가능 납부수단 선택 -->
     <div class="card">
-        <div class="step-title">STEP 2. 연결가능 납부수단</div>
+        <div class="step-title">연결가능 납부수단</div>
         <div id="meansList" class="means-list">
             <div class="means-empty">먼저 소유주를 조회하세요.</div>
         </div>
         <input type="hidden" id="selectedPayMeansNo">
     </div>
 
-    <!-- STEP 3: 사용자(자녀) 조회 + 연결 -->
+    <!-- 사용자(수익자) 조회 + 연결 -->
     <div class="card">
-        <div class="step-title">STEP 3. 사용자(수익자) 정보</div>
-        <label>사용자 주민번호 (수익자)</label>
-        <div class="row">
-            <div style="flex:2;">
-                <input id="bnfcRrn" placeholder="예: 9001011234567">
+        <div class="step-title">사용자(수익자) 정보</div>
+        <div class="row" style="align-items:center;">
+            <div style="flex:0 0 auto;">
+                <select id="bnfcLookupType" class="lookup-type" onchange="onBnfcTypeChange()">
+                    <option value="RRN">주민번호</option>
+                    <option value="SVC">서비스번호</option>
+                </select>
             </div>
             <div style="flex:1;">
-                <button type="button" class="lookup" onclick="lookupBnfc()">고객 조회</button>
+                <input id="bnfcKey" placeholder="예: 9001011234567">
+            </div>
+            <div style="flex:0 0 auto;">
+                <button type="button" class="lookup" onclick="lookupBnfc()">조회</button>
             </div>
         </div>
         <input type="hidden" id="bnfcCustomerNo">
         <div id="bnfcInfo" class="owner-info">사용자(수익자) 정보</div>
 
-        <label>관계 (사용자 기준)</label>
-        <select id="relCatgCd">
-            <option value="03">자녀</option>
-            <option value="01">부모</option>
-            <option value="02">배우자</option>
-            <option value="09">기타</option>
-        </select>
+        <div class="row" style="align-items:center; margin-top:10px;">
+            <div style="flex:0 0 auto;"><span class="field-box">관계</span></div>
+            <div style="flex:1;">
+                <select id="relCatgCd">
+                    <option value="03">자녀</option>
+                    <option value="01">부모</option>
+                    <option value="02">배우자</option>
+                    <option value="09">기타</option>
+                </select>
+            </div>
+        </div>
 
         <button class="submit" id="submitBtn" onclick="submitLink()">기존 수단으로 대리납부 연결</button>
         <div id="result" class="result"></div>
@@ -188,17 +234,20 @@
         if (el) { el.className = 'owner-info'; el.textContent = text; }
     }
 
-    // 주민번호로 고객 조회 (공통)
-    async function lookupCustomer(rrn, infoEl, onFound) {
+    // 조회구분(RRN/SVC) + 키로 고객 조회 (공통)
+    async function lookupCustomer(type, key, infoEl, onFound) {
         infoEl.className = 'owner-info';
-        if (!rrn) {
+        if (!key) {
             infoEl.className = 'owner-info err';
-            infoEl.textContent = '주민번호를 입력하세요.';
+            infoEl.textContent = (type === 'SVC') ? '서비스번호를 입력하세요.' : '주민번호를 입력하세요.';
             onFound(null);
             return;
         }
+        const url = (type === 'SVC')
+            ? '/api/autopay/services/by-service-no?serviceNo=' + encodeURIComponent(key)
+            : '/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(key);
         try {
-            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            const res = await fetch(url);
             if (res.ok) {
                 const c = await res.json();
                 infoEl.className = 'owner-info ok';
@@ -208,7 +257,9 @@
                 onFound(c);
             } else {
                 infoEl.className = 'owner-info err';
-                infoEl.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                infoEl.textContent = (type === 'SVC')
+                    ? '조회 실패: 해당 서비스번호로 연결된 고객이 없습니다.'
+                    : '조회 실패: 해당 주민번호의 고객이 없습니다.';
                 onFound(null);
             }
         } catch (e) {
@@ -218,9 +269,28 @@
         }
     }
 
+    // 조회구분 변경 시 입력 placeholder/초기화
+    function onOwnerTypeChange() {
+        const t = val('ownerLookupType');
+        const el = document.getElementById('ownerKey');
+        el.value = '';
+        el.placeholder = (t === 'SVC') ? '예: 01012345678 (서비스번호)' : '예: 6808231247113 (주민번호)';
+        setVal('ownerCustomerNo', ''); setVal('ownerPhoneNo', '');
+        resetInfo('ownerInfo', '조회된 소유주 정보가 여기에 표시됩니다.');
+        renderMeans([]);
+    }
+    function onBnfcTypeChange() {
+        const t = val('bnfcLookupType');
+        const el = document.getElementById('bnfcKey');
+        el.value = '';
+        el.placeholder = (t === 'SVC') ? '예: 01012345678 (서비스번호)' : '예: 9001011234567 (주민번호)';
+        setVal('bnfcCustomerNo', '');
+        resetInfo('bnfcInfo', '사용자(수익자) 정보');
+    }
+
     // STEP 1: 소유주 조회 → 소유주 지갑 목록 로딩
     async function lookupOwner() {
-        await lookupCustomer(val('ownerRrn').trim(),
+        await lookupCustomer(val('ownerLookupType'), val('ownerKey').trim(),
             document.getElementById('ownerInfo'), (c) => {
                 setVal('ownerCustomerNo', c ? c.customerNo : '');
                 setVal('ownerPhoneNo', c ? (c.mobilePhno || '') : '');
@@ -291,9 +361,9 @@
         });
     }
 
-    // STEP 3: 사용자(자녀) 조회
+    // STEP 3: 사용자(수익자) 조회
     async function lookupBnfc() {
-        await lookupCustomer(val('bnfcRrn').trim(),
+        await lookupCustomer(val('bnfcLookupType'), val('bnfcKey').trim(),
             document.getElementById('bnfcInfo'), (c) => {
                 setVal('bnfcCustomerNo', c ? c.customerNo : '');
             });

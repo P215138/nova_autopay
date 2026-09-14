@@ -53,6 +53,18 @@
         }
         .owner-info.ok { background: #e7f6ec; color: #16794c; }
         .owner-info.err { background: #fdecec; color: #b42318; }
+        /* 조회기준 콤보: 입력란과 톤을 맞춘 자연스러운 스타일 */
+        select.lookup-type {
+            width: auto;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            border: 1px solid #d0d3d8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+        select.lookup-type option { background: #fff; color: #222; }
         .section-title {
             font-size: 14px;
             font-weight: 700;
@@ -102,16 +114,21 @@
     <div class="card">
         <!-- 테넌트ID는 내부 고정값(SKT). 화면 입력 없이 hidden 유지 -->
         <input type="hidden" id="tenantId" value="SKT">
-        <label>주민번호</label>
-        <div class="row">
-            <div style="flex:2;">
-                <input id="rrn" placeholder="예: 6808231247113">
+        <div class="row" style="align-items:center;">
+            <div style="flex:0 0 auto;">
+                <select id="lookupType" class="lookup-type" onchange="onLookupTypeChange()">
+                    <option value="RRN">주민번호</option>
+                    <option value="SVC">서비스번호</option>
+                </select>
             </div>
             <div style="flex:1;">
+                <input id="rrn" placeholder="예: 6808231247113">
+            </div>
+            <div style="flex:0 0 auto;">
                 <button type="button" class="lookup" onclick="search()">조회</button>
             </div>
         </div>
-        <div id="custInfo" class="owner-info">조회할 고객의 주민번호를 입력하세요.</div>
+        <div id="custInfo" class="owner-info">조회할 고객의 주민번호 또는 서비스번호를 입력하세요.</div>
     </div>
 
     <!-- 지갑(납부수단 목록) -->
@@ -225,25 +242,43 @@
         return '-';
     }
 
+    // 조회구분 변경 시 입력 placeholder/초기화
+    function onLookupTypeChange() {
+        const t = val('lookupType');
+        const el = document.getElementById('rrn');
+        el.value = '';
+        el.placeholder = (t === 'SVC') ? '예: 01012345678 (서비스번호)' : '예: 6808231247113 (주민번호)';
+        const info = document.getElementById('custInfo');
+        info.className = 'owner-info';
+        info.textContent = '조회할 고객의 주민번호 또는 서비스번호를 입력하세요.';
+        hide('walletCard'); hide('asOwnerCard'); hide('asUserCard');
+    }
+
     async function search() {
         const tenantId = val('tenantId');
-        const rrn = val('rrn').trim();
+        const type = val('lookupType');
+        const key = val('rrn').trim();
         const info = document.getElementById('custInfo');
         hide('walletCard'); hide('asOwnerCard'); hide('asUserCard');
 
-        if (!rrn) {
+        if (!key) {
             info.className = 'owner-info err';
-            info.textContent = '주민번호를 입력하세요.';
+            info.textContent = (type === 'SVC') ? '서비스번호를 입력하세요.' : '주민번호를 입력하세요.';
             return;
         }
 
-        // 1) 고객 조회
+        // 1) 고객 조회 (조회구분에 따라 API 분기)
+        const custUrl = (type === 'SVC')
+            ? '/api/autopay/services/by-service-no?serviceNo=' + encodeURIComponent(key)
+            : '/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(key);
         let cust;
         try {
-            const res = await fetch('/api/autopay/customers/by-rrn?rrn=' + encodeURIComponent(rrn));
+            const res = await fetch(custUrl);
             if (!res.ok) {
                 info.className = 'owner-info err';
-                info.textContent = '조회 실패: 해당 주민번호의 고객이 없습니다.';
+                info.textContent = (type === 'SVC')
+                    ? '조회 실패: 해당 서비스번호로 연결된 고객이 없습니다.'
+                    : '조회 실패: 해당 주민번호의 고객이 없습니다.';
                 return;
             }
             cust = await res.json();

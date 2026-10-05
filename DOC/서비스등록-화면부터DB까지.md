@@ -335,3 +335,156 @@ Controller: View 반환 → JSON
 | 도메인 모델 | 업무 규칙(상태 전이 등)을 담은 순수 자바 객체. 프레임워크 비의존 |
 | 의존성 역전(DIP) | 업무가 기술에 의존하지 않고, 기술이 업무가 정한 포트를 따르게 뒤집는 것 |
 | 유스케이스 | 하나의 업무 시나리오(예: 서비스 등록)를 수행하는 application 서비스 |
+
+---
+
+# 부록: `serviceRepository.save()` 가 어떻게 `ServiceRepositoryAdapter.save()` 를 부르나
+
+> 이게 스프링을 처음 배울 때 가장 헷갈리는 부분이다.
+> "인터페이스에 대고 `save()`를 불렀는데 어떻게 구현 클래스가 실행되지?"
+
+핵심은 이거다: `ServiceRegistrationService`는 `serviceRepository`를 **인터페이스 타입(`ServiceRepositoryPort`)** 으로 들고 있는데, 그 안에 실제로 담긴 것은 **`ServiceRepositoryAdapter` 객체**다. 그래서 `.save()`를 부르면 어댑터의 `save()`가 실행된다. 이 "인터페이스 변수에 구현 객체가 담기는" 과정을 하나씩 풀어보자.
+
+---
+
+## 1. 먼저 자바의 기본 원리 (다형성)
+
+인터페이스 변수에는 그 인터페이스를 구현한 객체를 담을 수 있다. 그리고 메서드를 부르면 **실제로 담긴 객체의 메서드**가 실행된다.
+
+```java
+ServiceRepositoryPort port = new ServiceRepositoryAdapter(mapper);
+port.save(service);   // → ServiceRepositoryAdapter의 save()가 실행됨
+```
+
+`port`의 **선언 타입**은 인터페이스지만, **실제 담긴 것**은 어댑터다. 자바는 변수의 선언 타입이 아니라 **실제 객체**를 보고 메서드를 실행한다. 이걸 다형성(polymorphism)이라고 한다.
+
+우리 코드도 똑같다. 다만 `new`를 우리가 직접 안 쓰고 **스프링이 대신** 해준다는 점만 다르다.
+
+---
+
+## 2. 우리 코드에서 "담기는" 과정
+
+`ServiceRegistrationService`의 생성자를 보자:
+
+```java
+public ServiceRegistrationService(ServiceRepositoryPort serviceRepository,  // ← 인터페이스 타입
+                                  BillingAccountMapper billingAccountMapper,
+                                  CustomerService customerService) {
+    this.serviceRepository = serviceRepository;   // 받은 걸 그대로 보관
+    ...
+}
+```
+
+여기서 `serviceRepository`의 타입은 인터페이스(`ServiceRepositoryPort`)다. 이 생성자는 "누군가 `ServiceRepositoryPort`를 구현한 객체를 넣어줘"라고 요구할 뿐, 그게 뭔지는 모른다.
+
+그럼 누가 넣어줄까? **스프링**이다. 이게 "의존성 주입(DI)"이다.
+
+---
+
+## 3. 스프링이 연결해주는 과정 (앱 시작 시 딱 한 번)
+
+앱이 시작될 때, 스프링은 이런 순서로 동작한다:
+
+**(1) 어노테이션 붙은 클래스들을 찾아 객체를 만든다 (빈 등록)**
+
+```java
+@Repository                                          // ← 스프링아, 이거 객체로 만들어 관리해
+public class ServiceRepositoryAdapter implements ServiceRepositoryPort {
+    ...
+}
+
+@org.springframework.stereotype.Service              // ← 이것도 객체로 만들어
+public class ServiceRegistrationService { ... }
+```
+
+- `@Repository`를 보고 → `ServiceRepositoryAdapter` 객체를 하나 생성해 보관함(컨테이너)에 넣음
+- `@Service`를 보고 → `ServiceRegistrationService`도 만들어야 하는데, 생성자에 `ServiceRepositoryPort`가 필요하네?
+
+**(2) 필요한 걸 찾아 끼워준다 (주입)**
+
+스프링이 생각한다: "`ServiceRegistrationService`를 만들려면 `ServiceRepositoryPort` 타입 객체가 필요하다. 보관함에서 `ServiceRepositoryPort`를 **구현한** 객체를 찾자."
+
+→ `ServiceRepositoryAdapter`가 `implements ServiceRepositoryPort`이므로 딱 맞는다. 스프링은 이 어댑터 객체를 생성자에 **넣어준다.**
+
+결과적으로 이런 코드를 스프링이 대신 실행한 셈이다:
+
+```java
+// 스프링이 앱 시작 시 내부적으로 하는 일 (개념적으로)
+ServiceMapper mapper = ...;                                   // MyBatis가 만든 Mapper
+ServiceRepositoryAdapter adapter = new ServiceRepositoryAdapter(mapper);
+ServiceRegistrationService svc =
+        new ServiceRegistrationService(adapter, billingMapper, customerService);
+//                                     ↑ 어댑터가 여기 들어감!
+```
+
+그래서 `svc`의 `serviceRepository` 필드에는 **실제로 `ServiceRepositoryAdapter` 객체가 담긴다.** 선언 타입만 인터페이스일 뿐이다.
+
+---
+
+## 4. 이제 `save()` 호출 순간
+
+런타임에 등록 요청이 오면:
+
+```java
+// ServiceRegistrationService.register() 안에서
+service = serviceRepository.save(service);
+```
+
+- `serviceRepository`의 선언 타입은 `ServiceRepositoryPort`(인터페이스)
+- 하지만 실제 담긴 객체는 `ServiceRepositoryAdapter`
+- 자바는 실제 객체를 보고 실행 → **`ServiceRepositoryAdapter.save()`가 호출됨**
+
+그리고 어댑터의 save가 진짜 일을 한다:
+
+```java
+@Override
+public Service save(Service service) {
+    if (service.getServiceMgmtNo() == null) {
+        service.assignServiceMgmtNo(generateServiceMgmtNo());  // 채번 1+9자리
+    }
+    serviceMapper.insert(toEntity(service));                   // MyBatis로 INSERT
+    return service;
+}
+```
+
+---
+
+## 5. 그림으로 정리
+
+```
+[앱 시작 시 - 스프링이 준비]
+  @Repository ServiceRepositoryAdapter  ──생성──▶ (어댑터 객체)
+  @Service    ServiceRegistrationService 생성 시
+        생성자가 ServiceRepositoryPort 요구
+              │
+              ▼  스프링이 "Port를 구현한 객체" 탐색 → 어댑터 발견 → 주입
+  ServiceRegistrationService.serviceRepository = (어댑터 객체)
+              ↑ 선언 타입은 Port(인터페이스), 실제 내용물은 Adapter
+
+
+[런타임 - 등록 요청 시]
+  serviceRepository.save(service)
+        │  선언 타입: ServiceRepositoryPort (인터페이스, 구현 없음)
+        │  실제 객체: ServiceRepositoryAdapter
+        ▼  자바 다형성 → 실제 객체의 메서드 실행
+  ServiceRepositoryAdapter.save(service)
+        │  채번 + toEntity 변환
+        ▼
+  serviceMapper.insert(entity) → MySQL INSERT
+```
+
+---
+
+## 6. 왜 굳이 이렇게? (한 줄 요점)
+
+`ServiceRegistrationService`는 **`ServiceRepositoryAdapter`라는 이름조차 몰라도** 된다. 오직 `ServiceRepositoryPort`(약속)만 알고 `save()`를 부른다.
+
+그래서 나중에 저장 방식을 바꾸고 싶으면(예: MyBatis 대신 다른 기술), **포트를 구현한 새 어댑터**를 만들어 `@Repository`로 등록만 하면 된다. `ServiceRegistrationService`는 **한 글자도 안 고쳐도** 된다. 이게 헥사고날에서 얻는 이득이다.
+
+---
+
+## 확인 팁 (헷갈릴 때)
+
+- "인터페이스인데 어떻게 실행되지?" → **인터페이스 변수엔 항상 구현 객체가 담겨 있다.** 실행되는 건 그 구현 객체다.
+- "누가 담았지?" → **스프링이 앱 시작 시 `@Repository`/`@Service` 객체들을 만들어 생성자로 끼워줬다.**
+- "왜 Adapter가 선택됐지?" → **그게 `ServiceRepositoryPort`를 구현한 유일한 객체이기 때문.** (만약 구현체가 2개면 스프링이 헷갈려서 `@Primary`나 `@Qualifier`로 골라줘야 함)
